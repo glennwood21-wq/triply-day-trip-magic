@@ -61,13 +61,13 @@ const TripSetup = () => {
     }
     
     try {
-      const { error } = await supabase.from('trips').insert({
+      const { data, error } = await supabase.from('trips').insert({
         title: `Trip to ${formData.location}`,
         description: `Interests: ${formData.interests}. Distance: ${formData.distance} miles.`,
         location: formData.location,
         date: formData.date || null,
         user_id: session.user.id
-      });
+      }).select();
       
       if (error) throw error;
       
@@ -76,7 +76,12 @@ const TripSetup = () => {
         description: "Your trip has been created successfully.",
       });
       
-      navigate('/dashboard');
+      // Navigate to the preferences page with the trip ID
+      if (data && data.length > 0) {
+        navigate(`/trip-preferences?tripId=${data[0].id}`);
+      } else {
+        navigate('/dashboard');
+      }
       
     } catch (error: any) {
       toast({
@@ -152,7 +157,7 @@ const TripSetup = () => {
                   
                   <div className="pt-4">
                     <Button className="w-full btn-primary" type="submit">
-                      Generate My Trip Itinerary
+                      Continue to Trip Preferences
                     </Button>
                   </div>
                   

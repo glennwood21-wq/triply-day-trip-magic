@@ -1,6 +1,5 @@
-
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardNavbar from '@/components/DashboardNavbar';
 import { Button } from '@/components/ui/button';
@@ -15,8 +14,10 @@ import { MapPin, Clock, Car, Bus, Bike } from 'lucide-react';
 
 const TripSettings = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [tripId, setTripId] = useState<string | null>(null);
   const [tripSettings, setTripSettings] = useState({
     startLocation: '',
     duration: 4, // Default 4 hours
@@ -24,6 +25,34 @@ const TripSettings = () => {
     pointSpecificationType: 'distance', // 'specification' or 'distance'
     transportType: 'car' // 'car', 'public', 'bike', 'walking'
   });
+
+  useEffect(() => {
+    // Check if we have a trip ID from the previous page
+    const params = new URLSearchParams(location.search);
+    const id = params.get('tripId');
+    if (id) {
+      setTripId(id);
+      
+      // If we have a trip ID, fetch the trip data
+      const fetchTripData = async () => {
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('id', id)
+          .single();
+          
+        if (data && !error) {
+          // Pre-fill the location from the trip data if available
+          setTripSettings(prev => ({
+            ...prev,
+            startLocation: data.location || '',
+          }));
+        }
+      };
+      
+      fetchTripData();
+    }
+  }, [location]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -71,7 +100,7 @@ const TripSettings = () => {
         return;
       }
 
-      // Create a title based on the settings
+      // Create a title based on the settings if we don't have a trip ID
       const title = `Trip from ${tripSettings.startLocation} (${tripSettings.duration}h)`;
       const description = `Transport: ${tripSettings.transportType}. ${
         tripSettings.returnToStart 
@@ -79,15 +108,39 @@ const TripSettings = () => {
           : `One-way trip with ${tripSettings.pointSpecificationType} end point.`
       }`;
 
-      // Save to the trips table
-      const { error } = await supabase.from('trips').insert({
-        title,
-        description,
-        location: tripSettings.startLocation,
-        user_id: session.user.id
-      });
-      
-      if (error) throw error;
+      if (tripId) {
+        // Update existing trip
+        const { error } = await supabase
+          .from('trips')
+          .update({
+            location: tripSettings.startLocation,
+            settings: {
+              duration: tripSettings.duration,
+              returnToStart: tripSettings.returnToStart,
+              pointSpecificationType: tripSettings.pointSpecificationType,
+              transportType: tripSettings.transportType
+            }
+          })
+          .eq('id', tripId);
+          
+        if (error) throw error;
+      } else {
+        // Save to the trips table as a new trip
+        const { error } = await supabase.from('trips').insert({
+          title,
+          description,
+          location: tripSettings.startLocation,
+          settings: {
+            duration: tripSettings.duration,
+            returnToStart: tripSettings.returnToStart,
+            pointSpecificationType: tripSettings.pointSpecificationType,
+            transportType: tripSettings.transportType
+          },
+          user_id: session.user.id
+        });
+        
+        if (error) throw error;
+      }
       
       toast({
         title: "Trip settings saved",
