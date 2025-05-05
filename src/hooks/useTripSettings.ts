@@ -11,15 +11,16 @@ interface TripSettings {
   transportType: string;
 }
 
+// This interface is for what we get back from the database
 interface TripData {
   id: string;
-  location: string;
-  settings?: {
-    duration?: number;
-    returnToStart?: boolean;
-    pointSpecificationType?: string;
-    transportType?: string;
-  };
+  location: string | null;
+  description: string | null;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  date: string | null;
 }
 
 const useTripSettings = () => {
@@ -51,16 +52,26 @@ const useTripSettings = () => {
           
         if (data && !error) {
           // Pre-fill the location from the trip data if available
+          const tripData = data as TripData;
+          
+          // Try to parse settings from the description field if available
+          let parsedSettings: Partial<TripSettings> = {};
+          
+          if (tripData.description) {
+            try {
+              // Try to parse JSON from description
+              // Format might be: {"duration":4,"returnToStart":true,"pointSpecificationType":"distance","transportType":"car"}
+              parsedSettings = JSON.parse(tripData.description);
+            } catch (e) {
+              console.error("Could not parse settings from description:", e);
+            }
+          }
+          
+          // Update the trip settings with data from the database
           setTripSettings(prev => ({
             ...prev,
-            startLocation: data.location || '',
-            // If settings exist in the data, use them
-            ...(data.settings && {
-              duration: data.settings.duration || prev.duration,
-              returnToStart: data.settings.returnToStart !== undefined ? data.settings.returnToStart : prev.returnToStart,
-              pointSpecificationType: data.settings.pointSpecificationType || prev.pointSpecificationType,
-              transportType: data.settings.transportType || prev.transportType
-            })
+            startLocation: tripData.location || '',
+            ...parsedSettings
           }));
         }
       };

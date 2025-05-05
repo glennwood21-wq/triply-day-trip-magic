@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,11 +46,14 @@ const TripSettings = () => {
 
       // Create a title based on the settings if we don't have a trip ID
       const title = `Trip from ${tripSettings.startLocation} (${tripSettings.duration}h)`;
-      const description = `Transport: ${tripSettings.transportType}. ${
-        tripSettings.returnToStart 
-          ? `Return trip with ${tripSettings.pointSpecificationType} furthest point.` 
-          : `One-way trip with ${tripSettings.pointSpecificationType} end point.`
-      }`;
+      
+      // Serialize the settings to JSON and store them in the description field
+      const settingsJson = JSON.stringify({
+        duration: tripSettings.duration,
+        returnToStart: tripSettings.returnToStart,
+        pointSpecificationType: tripSettings.pointSpecificationType,
+        transportType: tripSettings.transportType
+      });
 
       if (tripId) {
         // Update existing trip
@@ -59,12 +61,7 @@ const TripSettings = () => {
           .from('trips')
           .update({
             location: tripSettings.startLocation,
-            settings: {
-              duration: tripSettings.duration,
-              returnToStart: tripSettings.returnToStart,
-              pointSpecificationType: tripSettings.pointSpecificationType,
-              transportType: tripSettings.transportType
-            }
+            description: settingsJson
           })
           .eq('id', tripId);
           
@@ -73,14 +70,8 @@ const TripSettings = () => {
         // Save to the trips table as a new trip
         const { error } = await supabase.from('trips').insert({
           title,
-          description,
+          description: settingsJson,
           location: tripSettings.startLocation,
-          settings: {
-            duration: tripSettings.duration,
-            returnToStart: tripSettings.returnToStart,
-            pointSpecificationType: tripSettings.pointSpecificationType,
-            transportType: tripSettings.transportType
-          },
           user_id: session.user.id
         });
         
