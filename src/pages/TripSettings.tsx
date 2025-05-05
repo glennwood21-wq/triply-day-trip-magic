@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -5,6 +6,7 @@ import DashboardNavbar from '@/components/DashboardNavbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { ArrowRight } from 'lucide-react';
 
 // Import our new components
 import StartLocationInput from '@/components/trip-settings/StartLocationInput';
@@ -48,12 +50,7 @@ const TripSettings = () => {
       const title = `Trip from ${tripSettings.startLocation} (${tripSettings.duration}h)`;
       
       // Serialize the settings to JSON and store them in the description field
-      const settingsJson = JSON.stringify({
-        duration: tripSettings.duration,
-        returnToStart: tripSettings.returnToStart,
-        pointSpecificationType: tripSettings.pointSpecificationType,
-        transportType: tripSettings.transportType
-      });
+      const settingsJson = JSON.stringify(tripSettings);
 
       if (tripId) {
         // Update existing trip
@@ -66,24 +63,32 @@ const TripSettings = () => {
           .eq('id', tripId);
           
         if (error) throw error;
+        
+        // Navigate to preferences page
+        navigate(`/trip-preferences-settings?tripId=${tripId}`);
       } else {
         // Save to the trips table as a new trip
-        const { error } = await supabase.from('trips').insert({
+        const { data, error } = await supabase.from('trips').insert({
           title,
           description: settingsJson,
           location: tripSettings.startLocation,
           user_id: session.user.id
-        });
+        }).select();
         
         if (error) throw error;
+        
+        // Navigate to preferences page if we created a new trip
+        if (data && data.length > 0) {
+          navigate(`/trip-preferences-settings?tripId=${data[0].id}`);
+        } else {
+          throw new Error("Failed to create trip");
+        }
       }
       
       toast({
         title: "Trip settings saved",
-        description: "Your trip settings have been saved successfully.",
+        description: "Your trip settings have been saved. Let's add some preferences!",
       });
-      
-      navigate('/dashboard');
     } catch (error: any) {
       toast({
         title: "Error",
@@ -138,10 +143,11 @@ const TripSettings = () => {
                   
                   <Button 
                     type="submit" 
-                    className="w-full mt-6" 
+                    className="w-full mt-6 flex items-center justify-center gap-2" 
                     disabled={loading}
                   >
-                    {loading ? 'Saving...' : 'Save Trip Settings'}
+                    {loading ? 'Saving...' : 'Continue to Preferences'}
+                    <ArrowRight size={16} />
                   </Button>
                 </form>
               </CardContent>

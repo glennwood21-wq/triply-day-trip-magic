@@ -10,6 +10,7 @@ import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
 import Dashboard from "./pages/Dashboard";
 import TripSettings from "./pages/TripSettings";
+import TripPreferencesSettings from "./pages/TripPreferencesSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/trip-setup" element={<Navigate to="/trip-settings" replace />} />
           <Route path="/trip-preferences" element={<TripPreferences />} />
+          <Route path="/trip-preferences-settings" element={<TripPreferencesSettings />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />

@@ -9,6 +9,11 @@ interface TripSettings {
   returnToStart: boolean;
   pointSpecificationType: string;
   transportType: string;
+  // New preference fields
+  stopTypes?: string[];
+  maxStops?: number;
+  foodStops?: number;
+  foodPreferences?: string[];
 }
 
 // This interface is for what we get back from the database
@@ -32,7 +37,11 @@ const useTripSettings = () => {
     duration: 4,
     returnToStart: true,
     pointSpecificationType: 'distance',
-    transportType: 'car'
+    transportType: 'car',
+    stopTypes: [],
+    maxStops: 5,
+    foodStops: 2,
+    foodPreferences: []
   });
 
   useEffect(() => {
@@ -60,7 +69,6 @@ const useTripSettings = () => {
           if (tripData.description) {
             try {
               // Try to parse JSON from description
-              // Format might be: {"duration":4,"returnToStart":true,"pointSpecificationType":"distance","transportType":"car"}
               parsedSettings = JSON.parse(tripData.description);
             } catch (e) {
               console.error("Could not parse settings from description:", e);
