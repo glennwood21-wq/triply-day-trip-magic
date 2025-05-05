@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,17 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
     date: '',
   });
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    // Get current user
+    const getCurrentUser = async () => {
+      const { data } = await supabase.auth.getSession();
+      setUser(data.session?.user || null);
+    };
+    
+    getCurrentUser();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -30,17 +41,26 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to create a trip.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setLoading(true);
     
     try {
-      const { error } = await supabase.from('trips').insert([
-        {
-          title: formData.title,
-          description: formData.description,
-          location: formData.location,
-          date: formData.date || null,
-        }
-      ]);
+      const { error } = await supabase.from('trips').insert({
+        title: formData.title,
+        description: formData.description,
+        location: formData.location,
+        date: formData.date || null,
+        user_id: user.id
+      });
       
       if (error) throw error;
       
@@ -105,7 +125,7 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
       </div>
       
       <div className="pt-4">
-        <Button className="w-full" type="submit" disabled={loading}>
+        <Button className="w-full" type="submit" disabled={loading || !user}>
           {loading ? 'Creating...' : 'Create Trip'}
         </Button>
       </div>

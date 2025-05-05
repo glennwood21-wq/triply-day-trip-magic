@@ -61,14 +61,13 @@ const TripSetup = () => {
     }
     
     try {
-      const { error } = await supabase.from('trips').insert([
-        {
-          title: `Trip to ${formData.location}`,
-          description: `Interests: ${formData.interests}. Distance: ${formData.distance} miles.`,
-          location: formData.location,
-          date: formData.date || null,
-        }
-      ]);
+      const { error } = await supabase.from('trips').insert({
+        title: `Trip to ${formData.location}`,
+        description: `Interests: ${formData.interests}. Distance: ${formData.distance} miles.`,
+        location: formData.location,
+        date: formData.date || null,
+        user_id: session.user.id
+      });
       
       if (error) throw error;
       
