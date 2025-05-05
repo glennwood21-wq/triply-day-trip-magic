@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardNavbar from '@/components/DashboardNavbar';
 import TripsList from '@/components/TripsList';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
-import { Calendar, Plus } from 'lucide-react';
+import { Calendar, Plus, Settings } from 'lucide-react';
 
 type Trip = Database['public']['Tables']['trips']['Row'];
 
@@ -99,20 +99,29 @@ const Dashboard = () => {
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold">My Trips</h1>
             
-            <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Plus size={16} />
-                  Create New Trip
+            <div className="flex gap-3">
+              <Link to="/trip-settings">
+                <Button variant="outline" className="gap-2">
+                  <Settings size={16} />
+                  Advanced Trip Settings
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                  <DialogTitle>Create New Trip</DialogTitle>
-                </DialogHeader>
-                <CreateTripForm onSuccess={handleTripCreated} />
-              </DialogContent>
-            </Dialog>
+              </Link>
+              
+              <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus size={16} />
+                    Create New Trip
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>Create New Trip</DialogTitle>
+                  </DialogHeader>
+                  <CreateTripForm onSuccess={handleTripCreated} />
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
           
           <TripsList trips={trips} loading={loading} onTripDeleted={fetchTrips} />
