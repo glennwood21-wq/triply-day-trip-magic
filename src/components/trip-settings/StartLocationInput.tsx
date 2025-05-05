@@ -19,11 +19,15 @@ const StartLocationInput = ({ value, onChange }: StartLocationInputProps) => {
       <Input
         id="startLocation"
         name="startLocation"
-        placeholder="Enter your starting point"
+        placeholder="Enter your starting point (city, landmark, address)"
         value={value}
         onChange={onChange}
         required
+        className="focus:border-primary focus:ring-primary"
       />
+      <p className="text-xs text-gray-500">
+        Provide a specific location for better trip planning results
+      </p>
     </div>
   );
 };

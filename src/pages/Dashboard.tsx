@@ -4,9 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardNavbar from '@/components/DashboardNavbar';
 import TripsList from '@/components/TripsList';
-import CreateTripForm from '@/components/CreateTripForm';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
 import { Calendar, Plus, Settings } from 'lucide-react';
@@ -19,7 +17,6 @@ const Dashboard = () => {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [openDialog, setOpenDialog] = useState(false);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -81,15 +78,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleTripCreated = () => {
-    setOpenDialog(false);
-    fetchTrips();
-    toast({
-      title: "Trip Created",
-      description: "Your new trip has been created successfully.",
-    });
-  };
-
   return (
     <div className="min-h-screen flex flex-col">
       <DashboardNavbar />
@@ -107,20 +95,13 @@ const Dashboard = () => {
                 </Button>
               </Link>
               
-              <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                <DialogTrigger asChild>
-                  <Button className="gap-2">
-                    <Plus size={16} />
-                    Create New Trip
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[500px]">
-                  <DialogHeader>
-                    <DialogTitle>Create New Trip</DialogTitle>
-                  </DialogHeader>
-                  <CreateTripForm onSuccess={handleTripCreated} />
-                </DialogContent>
-              </Dialog>
+              <Button 
+                className="gap-2"
+                onClick={() => navigate('/trip-settings')}
+              >
+                <Plus size={16} />
+                Create New Trip
+              </Button>
             </div>
           </div>
           

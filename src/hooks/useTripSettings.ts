@@ -11,6 +11,17 @@ interface TripSettings {
   transportType: string;
 }
 
+interface TripData {
+  id: string;
+  location: string;
+  settings?: {
+    duration?: number;
+    returnToStart?: boolean;
+    pointSpecificationType?: string;
+    transportType?: string;
+  };
+}
+
 const useTripSettings = () => {
   const location = useLocation();
   const [loading, setLoading] = useState(false);
