@@ -7,7 +7,7 @@ const Hero = () => {
   const navigate = useNavigate();
   
   const handleCreateTrip = () => {
-    navigate('/trip-setup');
+    navigate('/trip-settings');
   };
 
   return (

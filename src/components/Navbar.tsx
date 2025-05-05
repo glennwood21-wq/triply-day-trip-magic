@@ -59,7 +59,7 @@ const Navbar = () => {
                 </Button>
                 <Button 
                   className="bg-triply-blue hover:bg-triply-dark-blue text-white"
-                  onClick={() => navigate('/trip-setup')}
+                  onClick={() => navigate('/trip-settings')}
                 >
                   Create Trip
                 </Button>
