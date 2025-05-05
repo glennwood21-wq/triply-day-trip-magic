@@ -1,87 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardNavbar from '@/components/DashboardNavbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Clock, Car, Bus, Bike } from 'lucide-react';
+
+// Import our new components
+import StartLocationInput from '@/components/trip-settings/StartLocationInput';
+import DurationSlider from '@/components/trip-settings/DurationSlider';
+import ReturnToStartToggle from '@/components/trip-settings/ReturnToStartToggle';
+import TransportTypeSelector from '@/components/trip-settings/TransportTypeSelector';
+import useTripSettings from '@/hooks/useTripSettings';
 
 const TripSettings = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [tripId, setTripId] = useState<string | null>(null);
-  const [tripSettings, setTripSettings] = useState({
-    startLocation: '',
-    duration: 4, // Default 4 hours
-    returnToStart: true,
-    pointSpecificationType: 'distance', // 'specification' or 'distance'
-    transportType: 'car' // 'car', 'public', 'bike', 'walking'
-  });
-
-  useEffect(() => {
-    // Check if we have a trip ID from the previous page
-    const params = new URLSearchParams(location.search);
-    const id = params.get('tripId');
-    if (id) {
-      setTripId(id);
-      
-      // If we have a trip ID, fetch the trip data
-      const fetchTripData = async () => {
-        const { data, error } = await supabase
-          .from('trips')
-          .select('*')
-          .eq('id', id)
-          .single();
-          
-        if (data && !error) {
-          // Pre-fill the location from the trip data if available
-          setTripSettings(prev => ({
-            ...prev,
-            startLocation: data.location || '',
-          }));
-        }
-      };
-      
-      fetchTripData();
-    }
-  }, [location]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setTripSettings({
-      ...tripSettings,
-      [name]: value
-    });
-  };
-
-  const handleSliderChange = (value: number[]) => {
-    setTripSettings({
-      ...tripSettings,
-      duration: value[0]
-    });
-  };
-
-  const handleSwitchChange = (checked: boolean) => {
-    setTripSettings({
-      ...tripSettings,
-      returnToStart: checked
-    });
-  };
-
-  const handleRadioChange = (name: string, value: string) => {
-    setTripSettings({
-      ...tripSettings,
-      [name]: value
-    });
-  };
+  const {
+    tripId,
+    tripSettings,
+    loading,
+    setLoading,
+    handleInputChange,
+    handleSliderChange,
+    handleSwitchChange,
+    handleRadioChange
+  } = useTripSettings();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,22 +104,6 @@ const TripSettings = () => {
     }
   };
 
-  const renderTransportIcon = (type: string) => {
-    switch (type) {
-      case 'car':
-        return <Car size={18} />;
-      case 'public':
-        return <Bus size={18} />;
-      case 'bike':
-        return <Bike size={18} />;
-      case 'walking':
-        // Instead of using Walking icon which doesn't exist, we'll use a different approach
-        return <span className="inline-flex items-center justify-center w-[18px] h-[18px]">🚶</span>;
-      default:
-        return null;
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col">
       <DashboardNavbar />
@@ -191,105 +120,30 @@ const TripSettings = () => {
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Start Location */}
-                  <div className="space-y-2">
-                    <Label htmlFor="startLocation" className="flex items-center gap-2">
-                      <MapPin size={16} />
-                      Start Location
-                    </Label>
-                    <Input
-                      id="startLocation"
-                      name="startLocation"
-                      placeholder="Enter your starting point"
-                      value={tripSettings.startLocation}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
+                  <StartLocationInput 
+                    value={tripSettings.startLocation}
+                    onChange={handleInputChange}
+                  />
                   
                   {/* Trip Duration */}
-                  <div className="space-y-4">
-                    <Label className="flex items-center gap-2">
-                      <Clock size={16} />
-                      Trip Duration: {tripSettings.duration} hours
-                    </Label>
-                    <Slider
-                      value={[tripSettings.duration]}
-                      min={1}
-                      max={12}
-                      step={1}
-                      onValueChange={handleSliderChange}
-                    />
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>1h</span>
-                      <span>6h</span>
-                      <span>12h</span>
-                    </div>
-                  </div>
+                  <DurationSlider 
+                    value={tripSettings.duration}
+                    onValueChange={handleSliderChange}
+                  />
                   
                   {/* Return to Start */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="returnToStart" className="cursor-pointer">
-                        Return to Start Location
-                      </Label>
-                      <Switch
-                        id="returnToStart"
-                        checked={tripSettings.returnToStart}
-                        onCheckedChange={handleSwitchChange}
-                      />
-                    </div>
-                    
-                    {/* Option depends on return choice */}
-                    <div className="pl-4 border-l-2 border-gray-200">
-                      <Label className="block mb-3">
-                        {tripSettings.returnToStart ? 'Furthest Point Type' : 'End Point Type'}:
-                      </Label>
-                      <RadioGroup
-                        value={tripSettings.pointSpecificationType}
-                        onValueChange={(value) => handleRadioChange('pointSpecificationType', value)}
-                        className="space-y-2"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="specification" id="specification" />
-                          <Label htmlFor="specification" className="cursor-pointer">
-                            {tripSettings.returnToStart ? 'Furthest Point Specification' : 'End Point Specification'}
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="distance" id="distance" />
-                          <Label htmlFor="distance" className="cursor-pointer">
-                            {tripSettings.returnToStart ? 'Furthest Point by Distance' : 'End Point by Distance'}
-                          </Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-                  </div>
+                  <ReturnToStartToggle 
+                    returnToStart={tripSettings.returnToStart}
+                    onReturnChange={handleSwitchChange}
+                    pointSpecificationType={tripSettings.pointSpecificationType}
+                    onPointTypeChange={(value) => handleRadioChange('pointSpecificationType', value)}
+                  />
                   
                   {/* Transport Type */}
-                  <div className="space-y-3">
-                    <Label>Transport Type:</Label>
-                    <RadioGroup
-                      value={tripSettings.transportType}
-                      onValueChange={(value) => handleRadioChange('transportType', value)}
-                      className="grid grid-cols-2 gap-3"
-                    >
-                      {['car', 'public', 'bike', 'walking'].map((type) => (
-                        <div 
-                          key={type}
-                          className={`flex items-center space-x-2 p-3 border rounded-md hover:bg-gray-50 cursor-pointer ${
-                            tripSettings.transportType === type ? 'border-primary bg-primary/5' : 'border-gray-200'
-                          }`}
-                          onClick={() => handleRadioChange('transportType', type)}
-                        >
-                          <RadioGroupItem value={type} id={`transport-${type}`} />
-                          <Label htmlFor={`transport-${type}`} className="flex items-center gap-2 cursor-pointer">
-                            {renderTransportIcon(type)}
-                            <span className="capitalize">{type}</span>
-                          </Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
-                  </div>
+                  <TransportTypeSelector 
+                    value={tripSettings.transportType}
+                    onChange={(value) => handleRadioChange('transportType', value)}
+                  />
                   
                   <Button 
                     type="submit" 

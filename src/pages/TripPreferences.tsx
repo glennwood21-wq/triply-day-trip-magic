@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,7 +5,6 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
@@ -133,16 +131,14 @@ const TripPreferences = () => {
     setLoading(true);
     
     try {
-      // Update the trip with preferences
+      // Fix: Update the description field instead of using a non-existent preferences field
+      const preferencesText = `Stop types: ${stopTypes.join(', ')}. Max stops: ${maxStops}, Food stops: ${foodStops}. Food preferences: ${foodPreferences.join(', ')}`;
+      
+      // Update the trip with preferences stored in description
       const { error } = await supabase
         .from('trips')
         .update({
-          preferences: {
-            stopTypes,
-            maxStops,
-            foodStops,
-            foodPreferences
-          }
+          description: preferencesText
         })
         .eq('id', tripId);
       
