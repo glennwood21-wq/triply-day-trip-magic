@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Calendar } from 'lucide-react';
 
 type Trip = Database['public']['Tables']['trips']['Row'];
 
@@ -70,7 +71,7 @@ const TripsList = ({ trips, loading, onTripDeleted }: TripsListProps) => {
       {trips.map((trip) => (
         <Card key={trip.id} className="h-full flex flex-col">
           <CardHeader>
-            <CardTitle>{trip.title}</CardTitle>
+            <CardTitle className="text-xl">{trip.title}</CardTitle>
             <CardDescription>{trip.location}</CardDescription>
           </CardHeader>
           <CardContent className="flex-grow">
@@ -78,9 +79,10 @@ const TripsList = ({ trips, loading, onTripDeleted }: TripsListProps) => {
               {trip.description || 'No description provided'}
             </p>
             {trip.date && (
-              <p className="text-sm mt-4 font-medium">
-                Date: {new Date(trip.date).toLocaleDateString()}
-              </p>
+              <div className="flex items-center gap-2 mt-4 text-sm font-medium">
+                <Calendar size={16} className="text-gray-500" />
+                <span>{new Date(trip.date).toLocaleDateString()}</span>
+              </div>
             )}
           </CardContent>
           <CardFooter className="flex justify-between border-t pt-4">

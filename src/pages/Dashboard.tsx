@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
+import { Calendar, Plus } from 'lucide-react';
 
 type Trip = Database['public']['Tables']['trips']['Row'];
 
@@ -93,14 +94,17 @@ const Dashboard = () => {
     <div className="min-h-screen flex flex-col">
       <DashboardNavbar />
       
-      <main className="flex-grow py-8 px-4">
+      <main className="flex-grow py-8 px-4 bg-gray-50">
         <div className="container-custom">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold">My Trips</h1>
             
             <Dialog open={openDialog} onOpenChange={setOpenDialog}>
               <DialogTrigger asChild>
-                <Button>Create New Trip</Button>
+                <Button className="gap-2">
+                  <Plus size={16} />
+                  Create New Trip
+                </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
