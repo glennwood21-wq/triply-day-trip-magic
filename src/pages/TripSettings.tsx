@@ -11,7 +11,7 @@ import { Slider } from '@/components/ui/slider';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Clock, Car, Bus, Bike, Walking } from 'lucide-react';
+import { MapPin, Clock, Car, Bus, Bike } from 'lucide-react';
 
 const TripSettings = () => {
   const navigate = useNavigate();
@@ -115,7 +115,8 @@ const TripSettings = () => {
       case 'bike':
         return <Bike size={18} />;
       case 'walking':
-        return <Walking size={18} />;
+        // Instead of using Walking icon which doesn't exist, we'll use a different approach
+        return <span className="inline-flex items-center justify-center w-[18px] h-[18px]">🚶</span>;
       default:
         return null;
     }
