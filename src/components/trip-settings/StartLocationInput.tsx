@@ -2,10 +2,11 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin } from 'lucide-react';
+import { MapPin, AlertCircle } from 'lucide-react';
 import useGooglePlacesAutocomplete from '@/hooks/useGooglePlacesAutocomplete';
 import { getGoogleMapsApiKey } from '@/utils/apiKeys';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface StartLocationInputProps {
   value: string;
@@ -18,15 +19,19 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const inputRef = useRef<HTMLInputElement>(null);
   const [apiKey, setApiKey] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchApiKey = async () => {
       setLoading(true);
       try {
         const key = await getGoogleMapsApiKey();
+        console.log('API key fetched successfully (redacted for security)');
         setApiKey(key);
+        setApiKeyError(null);
       } catch (error) {
         console.error('Failed to fetch Google Maps API key:', error);
+        setApiKeyError('Failed to load location services. Please try again later.');
         toast({
           title: 'Error',
           description: 'Failed to load location autocomplete. Please try again later.',
@@ -47,21 +52,25 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   };
 
   // Only initialize the autocomplete when we have the API key
-  const { error } = useGooglePlacesAutocomplete({
+  const { error: autocompleteError } = useGooglePlacesAutocomplete({
     apiKey,
     onPlaceSelect: handlePlaceSelect,
     inputRef,
   });
 
+  // Combine API key errors with autocomplete errors
+  const error = apiKeyError || autocompleteError;
+
   useEffect(() => {
-    if (error) {
+    if (autocompleteError) {
+      console.error('Google Places Autocomplete error:', autocompleteError);
       toast({
         title: 'Error',
-        description: error,
+        description: autocompleteError,
         variant: 'destructive',
       });
     }
-  }, [error, toast]);
+  }, [autocompleteError, toast]);
 
   return (
     <div className="space-y-2">
@@ -87,6 +96,12 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           </div>
         )}
       </div>
+      {error && (
+        <Alert variant="destructive" className="mt-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <p className="text-xs text-gray-500">
         Provide a specific location for better trip planning results
       </p>

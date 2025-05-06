@@ -17,6 +17,13 @@ const useGooglePlacesAutocomplete = ({
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   useEffect(() => {
+    // If no API key is provided, set an error and return early
+    if (!apiKey || apiKey.trim() === '') {
+      console.error('Google Maps API key is missing or empty');
+      setError('Google Maps API key is missing. Please check your configuration.');
+      return;
+    }
+
     // If Google Maps API is already loaded, initialize autocomplete
     if (window.google && window.google.maps && window.google.maps.places) {
       initAutocomplete();
@@ -29,12 +36,20 @@ const useGooglePlacesAutocomplete = ({
       initAutocomplete();
     };
 
+    // Remove any existing Google Maps script to prevent duplicate loading
+    const existingScript = document.getElementById('google-maps-script');
+    if (existingScript) {
+      document.head.removeChild(existingScript);
+    }
+
     // Load the Google Maps Places API script
     const script = document.createElement('script');
+    script.id = 'google-maps-script';
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initPlacesAutocomplete`;
     script.async = true;
     script.defer = true;
     script.onerror = () => {
+      console.error('Failed to load Google Maps API script');
       setError('Failed to load Google Maps API');
     };
 
@@ -43,7 +58,10 @@ const useGooglePlacesAutocomplete = ({
     return () => {
       // Clean up the script and the global callback when the component unmounts
       window.initPlacesAutocomplete = () => {};
-      document.head.removeChild(script);
+      const scriptToRemove = document.getElementById('google-maps-script');
+      if (scriptToRemove) {
+        document.head.removeChild(scriptToRemove);
+      }
     };
   }, [apiKey]);
 
