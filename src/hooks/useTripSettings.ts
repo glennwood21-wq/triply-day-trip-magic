@@ -89,34 +89,42 @@ const useTripSettings = () => {
             
             // Try to parse settings from the description field if available
             let parsedSettings: Partial<TripSettings> = {};
+            let locationFromDescription = null;
             
             if (tripData.description) {
               try {
                 // Try to parse JSON from description
                 parsedSettings = JSON.parse(tripData.description);
                 console.log("Parsed settings from description:", parsedSettings);
+                
+                // Check if the location is stored in the description JSON
+                if (parsedSettings.location) {
+                  locationFromDescription = parsedSettings.location;
+                }
               } catch (e) {
                 console.error("Could not parse settings from description:", e);
               }
             }
             
-            // CRITICAL FIX: Ensure we use the location from the database first
-            // This is what the user entered on the first page
-            if (tripData.location) {
-              console.log("Using location from database:", tripData.location);
-            }
-            
             // Update the trip settings with data from the database
-            // Prioritize the location from the database as it's the original user input
             setTripSettings(prev => {
               const newSettings = {
                 ...prev,
                 ...parsedSettings,
               };
               
-              // Explicitly prioritize location from the database (first user input)
-              if (tripData.location) {
+              // Location priority:
+              // 1. Direct location field in database (if it exists)
+              // 2. Location from description JSON
+              // 3. startLocation from parsed settings
+              
+              if (tripData.location && tripData.location.trim() !== '') {
                 newSettings.startLocation = tripData.location;
+              } else if (locationFromDescription) {
+                newSettings.startLocation = locationFromDescription;
+              } else if (parsedSettings.startLocation) {
+                // Only use startLocation if we don't have a better source
+                newSettings.startLocation = parsedSettings.startLocation;
               }
               
               return newSettings;

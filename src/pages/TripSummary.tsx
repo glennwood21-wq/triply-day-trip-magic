@@ -34,7 +34,7 @@ const TripSummary = () => {
   const [generatingTrip, setGeneratingTrip] = useState(false);
   const [savingTrip, setSavingTrip] = useState(false);
   const [itinerary, setItinerary] = useState<TripItinerary | null>(null);
-  const [databaseLocation, setDatabaseLocation] = useState<string | null>(null);
+  const [locationFromDescription, setLocationFromDescription] = useState<string | null>(null);
   
   // Get trip settings from the custom hook
   const {
@@ -46,8 +46,8 @@ const TripSummary = () => {
   useEffect(() => {
     console.log("Current trip settings:", tripSettings);
     console.log("Starting location from settings:", tripSettings.startLocation);
-    console.log("Database location:", databaseLocation);
-  }, [tripSettings, databaseLocation]);
+    console.log("Location from description:", locationFromDescription);
+  }, [tripSettings, locationFromDescription]);
   
   // On initial load, check if we already have a generated itinerary
   // and fetch the location directly from the database as well
@@ -65,16 +65,18 @@ const TripSummary = () => {
           
           console.log("Trip data directly from database:", data);
           
-          // Store the location from the database
-          if (data?.location) {
-            console.log("Setting database location:", data.location);
-            setDatabaseLocation(data.location);
-          }
-          
+          // Check if there's a location stored in the description JSON
           if (data?.description) {
-            // Try to parse the description for generated itinerary
             try {
               const parsedDescription = JSON.parse(data.description);
+              
+              // We're specifically looking for the 'location' field here
+              // which is where Mentone is stored in the description
+              if (parsedDescription.location) {
+                console.log("Found location in description:", parsedDescription.location);
+                setLocationFromDescription(parsedDescription.location);
+              }
+              
               if (parsedDescription.generatedItinerary) {
                 setItinerary(parsedDescription.generatedItinerary);
               }
@@ -337,14 +339,14 @@ IMPORTANT GUIDELINES:
 
   // Helper function to determine the starting location display value
   const getStartingLocation = () => {
-    // First priority: directly fetched location from database (most reliable)
-    if (databaseLocation) {
-      return databaseLocation;
+    // First priority: location from trip settings if it has been properly loaded
+    if (tripSettings.startLocation && tripSettings.startLocation.trim() !== '') {
+      return tripSettings.startLocation;
     }
     
-    // Second priority: location from trip settings
-    if (tripSettings.startLocation) {
-      return tripSettings.startLocation;
+    // Second priority: location from description parsed separately
+    if (locationFromDescription && locationFromDescription.trim() !== '') {
+      return locationFromDescription;
     }
     
     // Fallback
