@@ -50,6 +50,7 @@ serve(async (req) => {
     const searchPath = url.pathname.split('/').pop();
     
     if (searchPath === 'autocomplete') {
+      // Fix: Get query from URL search params instead of body
       const query = url.searchParams.get('query');
       if (!query) {
         return new Response(

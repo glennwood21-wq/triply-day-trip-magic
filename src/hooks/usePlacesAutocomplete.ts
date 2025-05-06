@@ -47,9 +47,9 @@ export const usePlacesAutocomplete = ({
 
     try {
       console.log('Fetching place suggestions for:', query);
-      const { data, error: apiError } = await supabase.functions.invoke('get-google-maps-key/autocomplete', {
-        method: 'GET',
-        query: { query }
+      // Fix: Pass query as a URL parameter instead of query object
+      const { data, error: apiError } = await supabase.functions.invoke(`get-google-maps-key/autocomplete?query=${encodeURIComponent(query)}`, {
+        method: 'GET'
       });
 
       if (apiError) {

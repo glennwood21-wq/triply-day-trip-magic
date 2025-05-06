@@ -32,10 +32,9 @@ export const searchPlaces = async (query: string) => {
   console.log('Searching places with query:', query);
   
   try {
-    // Make request to the Supabase Edge Function with query parameter
-    const { data, error } = await supabase.functions.invoke('get-google-maps-key/autocomplete', {
-      method: 'GET',
-      query: { query }
+    // Fix: Pass query as a URL parameter instead of query object
+    const { data, error } = await supabase.functions.invoke(`get-google-maps-key/autocomplete?query=${encodeURIComponent(query)}`, {
+      method: 'GET'
     });
     
     if (error) {
