@@ -1,131 +1,126 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
+import StartLocationInput from './StartLocationInput';
 
 interface ReturnToStartToggleProps {
   returnToStart: boolean;
   onReturnChange: (checked: boolean) => void;
   pointSpecificationType: string;
   onPointTypeChange: (value: string) => void;
-  pointSpecification?: string;
-  onPointSpecificationChange?: (value: string) => void;
-  distanceValue?: number;
-  onDistanceValueChange?: (value: number) => void;
+  pointSpecification: string;
+  onPointSpecificationChange: (value: string) => void;
+  distanceValue: number;
+  onDistanceValueChange: (value: number) => void;
 }
 
-const ReturnToStartToggle = ({ 
-  returnToStart, 
-  onReturnChange, 
-  pointSpecificationType, 
+const ReturnToStartToggle = ({
+  returnToStart,
+  onReturnChange,
+  pointSpecificationType,
   onPointTypeChange,
-  pointSpecification = '',
+  pointSpecification,
   onPointSpecificationChange,
-  distanceValue = 0,
+  distanceValue,
   onDistanceValueChange
 }: ReturnToStartToggleProps) => {
-  // Local state to manage input values if props are not provided
-  const [localPointSpecification, setLocalPointSpecification] = useState(pointSpecification);
-  const [localDistanceValue, setLocalDistanceValue] = useState(distanceValue);
-
-  // Update local state when props change
-  useEffect(() => {
-    setLocalPointSpecification(pointSpecification);
-    setLocalDistanceValue(distanceValue);
-  }, [pointSpecification, distanceValue]);
-
-  const handlePointSpecificationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setLocalPointSpecification(value);
-    if (onPointSpecificationChange) {
-      onPointSpecificationChange(value);
+  // Handle input change for autocomplete fields
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
+    if (fieldName === 'pointSpecification') {
+      onPointSpecificationChange(e.target.value);
     }
   };
 
-  const handleDistanceValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = Number(e.target.value);
-    setLocalDistanceValue(value);
-    if (onDistanceValueChange) {
-      onDistanceValueChange(value);
-    }
+  const handleLocationSelect = (location: string) => {
+    onPointSpecificationChange(location);
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Label htmlFor="returnToStart" className="cursor-pointer">
-          Return to Start Location
+        <Label htmlFor="return-toggle" className="text-base font-medium">
+          Return to start
         </Label>
-        <Switch
-          id="returnToStart"
+        <Switch 
+          id="return-toggle" 
           checked={returnToStart}
           onCheckedChange={onReturnChange}
         />
       </div>
       
-      <div className="pl-4 border-l-2 border-gray-200 space-y-4">
-        <Label className="block mb-3">
-          {returnToStart ? 'Furthest Point Type' : 'End Point Type'}:
-        </Label>
-        <RadioGroup
-          value={pointSpecificationType}
-          onValueChange={onPointTypeChange}
-          className="space-y-4"
-        >
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="specification" id="specification" />
-              <Label htmlFor="specification" className="cursor-pointer">
-                {returnToStart ? 'Furthest Point Specification' : 'End Point Specification'}
-              </Label>
-            </div>
-            
-            {pointSpecificationType === 'specification' && (
-              <div className="ml-6 mt-2">
-                <div className="space-y-1">
-                  <Label>
-                    Enter {returnToStart ? 'furthest point' : 'end point'} location:
-                  </Label>
-                  <Input 
-                    type="text" 
-                    placeholder="e.g. Los Angeles, CA"
-                    value={localPointSpecification}
-                    onChange={handlePointSpecificationChange}
-                  />
-                </div>
+      {!returnToStart && (
+        <div className="space-y-6 pl-2 border-l-2 border-gray-200">
+          <div className="space-y-4">
+            <Label className="text-base font-medium">
+              Specify where your trip will end
+            </Label>
+            <RadioGroup 
+              value={pointSpecificationType} 
+              onValueChange={onPointTypeChange}
+              className="flex flex-col space-y-2"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="end-point" id="end-point" />
+                <Label htmlFor="end-point">Enter end point location</Label>
               </div>
-            )}
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="furthest-point" id="furthest-point" />
+                <Label htmlFor="furthest-point">Enter furthest point location</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="distance" id="distance" />
+                <Label htmlFor="distance">Specify distance from start</Label>
+              </div>
+            </RadioGroup>
           </div>
           
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="distance" id="distance" />
-              <Label htmlFor="distance" className="cursor-pointer">
-                {returnToStart ? 'Furthest Point by Distance' : 'End Point by Distance'}
-              </Label>
+          {/* Conditional rendering based on the selected option */}
+          {pointSpecificationType === 'end-point' && (
+            <div className="space-y-2 pl-4">
+              <StartLocationInput
+                value={pointSpecification}
+                onChange={(e) => handleInputChange(e, 'pointSpecification')}
+                onLocationSelect={handleLocationSelect}
+              />
             </div>
-            
-            {pointSpecificationType === 'distance' && (
-              <div className="ml-6 mt-2">
-                <div className="space-y-1">
-                  <Label>
-                    Maximum distance (miles):
+          )}
+          
+          {pointSpecificationType === 'furthest-point' && (
+            <div className="space-y-2 pl-4">
+              <StartLocationInput
+                value={pointSpecification}
+                onChange={(e) => handleInputChange(e, 'pointSpecification')}
+                onLocationSelect={handleLocationSelect}
+              />
+            </div>
+          )}
+          
+          {pointSpecificationType === 'distance' && (
+            <div className="space-y-4 pl-4">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Label htmlFor="distance-value" className="text-sm mb-2 block">
+                    Distance ({distanceValue}km)
                   </Label>
-                  <Input 
-                    type="number" 
-                    min="0"
-                    placeholder="e.g. 100"
-                    value={localDistanceValue || ''}
-                    onChange={handleDistanceValueChange}
+                  <Slider 
+                    id="distance-value"
+                    value={[distanceValue]}
+                    min={10}
+                    max={500}
+                    step={10}
+                    onValueChange={(values) => onDistanceValueChange(values[0])}
+                    className="mt-2"
                   />
                 </div>
               </div>
-            )}
-          </div>
-        </RadioGroup>
-      </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

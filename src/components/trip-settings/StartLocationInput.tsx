@@ -18,9 +18,15 @@ interface StartLocationInputProps {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onLocationSelect?: (location: string) => void;
+  label?: string;
 }
 
-const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocationInputProps) => {
+const StartLocationInput = ({ 
+  value, 
+  onChange, 
+  onLocationSelect,
+  label = "Start Location" 
+}: StartLocationInputProps) => {
   const { toast } = useToast();
   const [inputValue, setInputValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
@@ -40,6 +46,11 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
     debounceMs: 400, // Increased debounce time for better performance
     minChars: 3      // Only search when user has typed at least 3 characters
   });
+
+  // Update inputValue when value prop changes
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,7 +75,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
     
     const syntheticEvent = {
       target: {
-        name: "startLocation",
+        name: inputRef.current?.name || "location",
         value: place.formattedAddress
       }
     } as unknown as React.ChangeEvent<HTMLInputElement>;
@@ -109,16 +120,16 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="startLocation" className="flex items-center gap-2">
+      <Label htmlFor={inputRef.current?.id || "location"} className="flex items-center gap-2">
         <MapPin size={16} />
-        Start Location
+        {label}
       </Label>
       <div className="relative">
         <div className="relative flex items-center">
           <Input
-            id="startLocation"
-            name="startLocation"
-            placeholder="Enter your starting point (city, landmark, address)"
+            id={inputRef.current?.id || "location"}
+            name={inputRef.current?.name || "location"}
+            placeholder="Enter location (city, landmark, address)"
             value={inputValue}
             onChange={handleInputChange}
             onFocus={() => setIsFocused(true)}
@@ -148,7 +159,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
                     setDropdownOpen(false);
                     const syntheticEvent = {
                       target: {
-                        name: "startLocation",
+                        name: inputRef.current?.name || "location",
                         value: ""
                       }
                     } as unknown as React.ChangeEvent<HTMLInputElement>;
