@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,8 +28,12 @@ const TripAdditionalPreferences = () => {
   const [withKids, setWithKids] = useState<boolean>(tripSettings.travelingWithKids || false);
   const [withPets, setWithPets] = useState<boolean>(tripSettings.travelingWithPets || false);
   const [accessibilityNeeds, setAccessibilityNeeds] = useState<string[]>(tripSettings.accessibilityNeeds || []);
-  const [preferenceType, setPreferenceType] = useState<string>(tripSettings.preferenceType || 'mix');
-  const [budgetLevel, setBudgetLevel] = useState<string>(tripSettings.budgetLevel || 'medium');
+  const [preferenceType, setPreferenceType] = useState<'hidden-gems' | 'top-rated' | 'mix'>(
+    (tripSettings.preferenceType as 'hidden-gems' | 'top-rated' | 'mix') || 'mix'
+  );
+  const [budgetLevel, setBudgetLevel] = useState<'low' | 'medium' | 'high'>(
+    (tripSettings.budgetLevel as 'low' | 'medium' | 'high') || 'medium'
+  );
   const [weatherSensitive, setWeatherSensitive] = useState<boolean>(tripSettings.weatherSensitive || false);
   
   // Accessibility needs options
@@ -186,7 +189,7 @@ const TripAdditionalPreferences = () => {
                     <Label className="text-lg font-medium">Want hidden gems or top-rated spots?</Label>
                     <RadioGroup 
                       value={preferenceType} 
-                      onValueChange={setPreferenceType}
+                      onValueChange={(value: 'hidden-gems' | 'top-rated' | 'mix') => setPreferenceType(value)}
                       className="flex flex-col space-y-2"
                     >
                       <div className="flex items-center space-x-2">
@@ -209,7 +212,7 @@ const TripAdditionalPreferences = () => {
                     <Label className="text-lg font-medium">Budget level</Label>
                     <RadioGroup 
                       value={budgetLevel} 
-                      onValueChange={setBudgetLevel}
+                      onValueChange={(value: 'low' | 'medium' | 'high') => setBudgetLevel(value)}
                       className="flex flex-col space-y-2"
                     >
                       <div className="flex items-center space-x-2">
