@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MapPin, AlertCircle, Loader2 } from 'lucide-react';
@@ -21,73 +21,44 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const [apiKey, setApiKey] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const maxRetries = 3;
-
-  const fetchApiKey = useCallback(async () => {
-    if (retryCount >= maxRetries) {
-      console.log(`Max retries (${maxRetries}) reached. Stopping API key fetch attempts.`);
-      return;
-    }
-
+  
+  // Fetch the Google Maps API key
+  const fetchApiKey = async () => {
     setLoading(true);
     try {
       console.log('Attempting to fetch Google Maps API key');
       const key = await getGoogleMapsApiKey();
-      
-      // Validate the key
-      if (!key) {
-        throw new Error('No API key received');
-      }
-      
-      if (key.trim() === '') {
-        throw new Error('Empty API key received');
-      }
-      
       console.log('API key fetched successfully');
       setApiKey(key);
       setApiKeyError(null);
-      // Reset retry count on success
-      setRetryCount(0);
-      setIsInitialLoad(false);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Failed to fetch Google Maps API key:', errorMessage);
       setApiKeyError('Failed to load location services. Please try again later.');
-      setIsInitialLoad(false);
       
-      // Only show toast on first error to avoid spamming
-      if (retryCount === 0) {
-        toast({
-          title: 'Location Service Error',
-          description: 'Failed to load location autocomplete. You can still enter a location manually.',
-          variant: 'default',
-        });
-      }
+      toast({
+        title: 'Location Service Error',
+        description: 'Failed to load location autocomplete. You can still enter a location manually.',
+        variant: 'default',
+      });
     } finally {
       setLoading(false);
     }
-  }, [retryCount, maxRetries, toast]);
-
-  // Retry mechanism with manual trigger
-  const handleRetry = () => {
-    setRetryCount(prev => prev + 1);
-    setApiKeyError(null);
-    fetchApiKey();
   };
 
+  // Fetch API key on component mount
   useEffect(() => {
     fetchApiKey();
-  }, [retryCount, fetchApiKey]);
+  }, []);
 
+  // Handle location selection
   const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
     if (place.formatted_address && onLocationSelect) {
       onLocationSelect(place.formatted_address);
     }
   };
 
-  // Only initialize the autocomplete when we have the API key
+  // Initialize Google Places Autocomplete
   const { error: autocompleteError, loaded } = useGooglePlacesAutocomplete({
     apiKey,
     onPlaceSelect: handlePlaceSelect,
@@ -109,20 +80,10 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
     }
   }, [autocompleteError, apiKeyError, toast]);
 
-  // Ensure the input field is never disabled
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.disabled = false;
-    }
-  }, [value]);
-
-  // Custom input onChange handler to ensure the input stays enabled
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e);
-    // Make sure the input is not disabled after the change
-    if (inputRef.current) {
-      inputRef.current.disabled = false;
-    }
+  // Manual retry function
+  const handleRetry = () => {
+    setApiKeyError(null);
+    fetchApiKey();
   };
 
   return (
@@ -135,13 +96,12 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         <Input
           id="startLocation"
           name="startLocation"
-          placeholder={isInitialLoad ? "Loading location search..." : "Enter your starting point (city, landmark, address)"}
+          placeholder={loading ? "Loading location search..." : "Enter your starting point (city, landmark, address)"}
           value={value}
-          onChange={handleInputChange}
+          onChange={onChange}
           required
           className={`focus:border-primary focus:ring-primary ${error ? 'border-red-500' : ''}`}
           ref={inputRef}
-          disabled={false} // Never disable the input
         />
         {loading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">

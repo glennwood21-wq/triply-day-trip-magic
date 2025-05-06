@@ -6,10 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import useGooglePlacesAutocomplete from '@/hooks/useGooglePlacesAutocomplete';
 import { getGoogleMapsApiKey } from '@/utils/apiKeys';
-import { Loader2, AlertCircle } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import useGooglePlacesAutocomplete from '@/hooks/useGooglePlacesAutocomplete';
+import { Loader2 } from 'lucide-react';
 
 interface CreateTripFormProps {
   onSuccess: () => void;
@@ -25,7 +24,6 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
   });
   const [loading, setLoading] = useState(false);
   const [apiLoading, setApiLoading] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [apiKey, setApiKey] = useState<string>('');
   const locationInputRef = useRef<HTMLInputElement>(null);
@@ -44,14 +42,9 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
       setApiLoading(true);
       try {
         const key = await getGoogleMapsApiKey();
-        if (!key || key.trim() === '') {
-          throw new Error('Empty API key received');
-        }
         setApiKey(key);
-        setApiError(null);
       } catch (error) {
         console.error('Failed to fetch Google Maps API key:', error);
-        setApiError('Location autocomplete is not available. You can still enter location manually.');
         toast({
           title: 'Warning',
           description: 'Location autocomplete is not available. You can still enter location manually.',
@@ -70,11 +63,6 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
       ...formData,
       [e.target.name]: e.target.value,
     });
-    
-    // Ensure input stays enabled
-    if (e.target.name === 'location' && locationInputRef.current) {
-      locationInputRef.current.disabled = false;
-    }
   };
 
   const handleLocationSelect = (place: google.maps.places.PlaceResult) => {
@@ -86,22 +74,12 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
     }
   };
 
-  // Initialize Google Places Autocomplete when API key is available
-  const { error: autocompleteError, loaded } = useGooglePlacesAutocomplete({
+  // Initialize Google Places Autocomplete
+  const { loaded } = useGooglePlacesAutocomplete({
     apiKey,
     onPlaceSelect: handleLocationSelect,
     inputRef: locationInputRef,
   });
-
-  // Combined error state
-  const error = apiError || autocompleteError;
-
-  // Make sure input stays enabled
-  useEffect(() => {
-    if (locationInputRef.current && apiKey && !error && !apiLoading) {
-      locationInputRef.current.disabled = false;
-    }
-  }, [apiKey, error, apiLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,13 +150,7 @@ const CreateTripForm = ({ onSuccess }: CreateTripFormProps) => {
             </div>
           )}
         </div>
-        {error && (
-          <Alert variant="destructive" className="mt-2">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {loaded && !error && (
+        {loaded && (
           <p className="text-xs text-gray-500 mt-1">
             <span className="text-green-600">✓</span> Location search ready
           </p>
