@@ -44,8 +44,81 @@ serve(async (req) => {
         }
       );
     }
+    
+    // Check if this is a place autocomplete request
+    const url = new URL(req.url);
+    const searchPath = url.pathname.split('/').pop();
+    
+    if (searchPath === 'autocomplete') {
+      const query = url.searchParams.get('query');
+      if (!query) {
+        return new Response(
+          JSON.stringify({
+            error: "Missing query parameter",
+            status: "error"
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
 
-    // Log success to help with debugging
+      console.log(`Fetching place autocomplete results for: ${query}`);
+      
+      try {
+        // Call the Places API (NEW)
+        const placesResponse = await fetch(
+          `https://places.googleapis.com/v1/places:autocomplete`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress'
+            },
+            body: JSON.stringify({
+              textQuery: query,
+              languageCode: "en"
+            })
+          }
+        );
+
+        if (!placesResponse.ok) {
+          const errorText = await placesResponse.text();
+          console.error('Places API error:', errorText);
+          throw new Error(`Places API error: ${placesResponse.status} - ${errorText}`);
+        }
+        
+        const placesData = await placesResponse.json();
+        console.log('Places API response received successfully');
+        
+        return new Response(
+          JSON.stringify({
+            results: placesData.places || [],
+            status: "success"
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      } catch (error) {
+        console.error('Error fetching from Places API:', error);
+        return new Response(
+          JSON.stringify({
+            error: error.message || "Failed to fetch places",
+            status: "error"
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
+    // Default response is just to return the API key
     console.log("Successfully retrieved Google Maps API key");
     
     return new Response(
@@ -59,7 +132,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("Error retrieving Google Maps API key:", error);
+    console.error("Error in edge function:", error);
     return new Response(
       JSON.stringify({ 
         error: error.message || "Unknown error",

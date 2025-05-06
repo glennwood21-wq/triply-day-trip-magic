@@ -27,3 +27,31 @@ export const getGoogleMapsApiKey = async (): Promise<string> => {
     throw error;
   }
 };
+
+export const searchPlaces = async (query: string) => {
+  console.log('Searching places with query:', query);
+  
+  try {
+    // Make request to the Supabase Edge Function with query parameter
+    const { data, error } = await supabase.functions.invoke('get-google-maps-key/autocomplete', {
+      method: 'GET',
+      query: { query }
+    });
+    
+    if (error) {
+      console.error('Error searching places:', error);
+      throw new Error(`Failed to search places: ${error.message}`);
+    }
+    
+    if (!data || data.status === 'error') {
+      console.error('Error in place search response:', data);
+      throw new Error(data?.error || 'Failed to search places');
+    }
+    
+    console.log('Places search results:', data.results);
+    return data.results;
+  } catch (error) {
+    console.error('Failed to search places:', error);
+    throw error;
+  }
+};

@@ -1,13 +1,13 @@
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
-import useGooglePlacesAutocomplete from '@/hooks/useGooglePlacesAutocomplete';
-import { getGoogleMapsApiKey } from '@/utils/apiKeys';
+import { MapPin, AlertCircle, Loader2, CheckCircle2, X } from 'lucide-react';
+import usePlacesAutocomplete from '@/hooks/usePlacesAutocomplete';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { useDebounce } from '@/hooks/useDebounce';
 
 interface StartLocationInputProps {
   value: string;
@@ -17,74 +17,96 @@ interface StartLocationInputProps {
 
 const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocationInputProps) => {
   const { toast } = useToast();
+  const [inputValue, setInputValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+  const debouncedInputValue = useDebounce(inputValue, 300);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [apiKey, setApiKey] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   
-  // Fetch the Google Maps API key
-  const fetchApiKey = async () => {
-    setLoading(true);
-    setApiKeyError(null);
+  // Setup Places autocomplete
+  const { suggestions, loading, error, search, clearSuggestions } = usePlacesAutocomplete({
+    onPlaceSelect: (place) => {
+      if (place.formattedAddress && onLocationSelect) {
+        onLocationSelect(place.formattedAddress);
+        
+        // Also update via the onChange handler to ensure the input value is updated
+        const syntheticEvent = {
+          target: {
+            name: "startLocation",
+            value: place.formattedAddress
+          }
+        } as unknown as React.ChangeEvent<HTMLInputElement>;
+        
+        onChange(syntheticEvent);
+        setInputValue(place.formattedAddress);
+        clearSuggestions();
+      }
+    }
+  });
+
+  // Handle input change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+    onChange(e);
+  };
+
+  // Handle place selection
+  const handleSelectPlace = (place: any) => {
+    if (onLocationSelect) {
+      onLocationSelect(place.formattedAddress);
+    }
     
-    try {
-      console.log('Fetching Google Maps API key for StartLocationInput');
-      const key = await getGoogleMapsApiKey();
-      console.log('API key fetched successfully');
-      setApiKey(key);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Failed to fetch Google Maps API key:', errorMessage);
-      setApiKeyError('Failed to load location services');
-      
+    const syntheticEvent = {
+      target: {
+        name: "startLocation",
+        value: place.formattedAddress
+      }
+    } as unknown as React.ChangeEvent<HTMLInputElement>;
+    
+    onChange(syntheticEvent);
+    setInputValue(place.formattedAddress);
+    clearSuggestions();
+    setIsFocused(false);
+  };
+
+  // Handle outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsRef.current && 
+        !suggestionsRef.current.contains(event.target as Node) && 
+        inputRef.current && 
+        !inputRef.current.contains(event.target as Node)
+      ) {
+        setIsFocused(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Search for places when the input changes
+  useEffect(() => {
+    if (debouncedInputValue) {
+      search(debouncedInputValue);
+    } else {
+      clearSuggestions();
+    }
+  }, [debouncedInputValue, search, clearSuggestions]);
+
+  // Show error toast when API error occurs
+  useEffect(() => {
+    if (error) {
       toast({
         title: 'Location Service Issue',
         description: 'Search suggestions may be limited. You can still enter a location manually.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
     }
-  };
-
-  // Fetch API key on component mount
-  useEffect(() => {
-    fetchApiKey();
-  }, []);
-
-  // Handle location selection
-  const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
-    if (place.formatted_address && onLocationSelect) {
-      onLocationSelect(place.formatted_address);
-      
-      // Also update via the onChange handler to ensure the input value is updated
-      if (inputRef.current) {
-        const syntheticEvent = {
-          target: {
-            name: "startLocation",
-            value: place.formatted_address
-          }
-        } as unknown as React.ChangeEvent<HTMLInputElement>;
-        
-        onChange(syntheticEvent);
-      }
-    }
-  };
-
-  // Initialize Google Places Autocomplete
-  const { error: autocompleteError, loaded } = useGooglePlacesAutocomplete({
-    apiKey,
-    onPlaceSelect: handlePlaceSelect,
-    inputRef,
-  });
-
-  // Combine errors
-  const error = apiKeyError || autocompleteError;
-
-  // Handle retry
-  const handleRetry = () => {
-    fetchApiKey();
-  };
+  }, [error, toast]);
 
   return (
     <div className="space-y-2">
@@ -97,21 +119,57 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           id="startLocation"
           name="startLocation"
           placeholder="Enter your starting point (city, landmark, address)"
-          value={value}
-          onChange={onChange}
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={() => setIsFocused(true)}
           ref={inputRef}
           className={`focus:border-primary focus:ring-primary ${error ? 'border-red-400' : ''}`}
-          // Never disable the input - user should always be able to type
           aria-invalid={!!error}
         />
+        
+        {inputValue && (
+          <button
+            type="button"
+            onClick={() => {
+              setInputValue('');
+              clearSuggestions();
+              const syntheticEvent = {
+                target: {
+                  name: "startLocation",
+                  value: ""
+                }
+              } as unknown as React.ChangeEvent<HTMLInputElement>;
+              onChange(syntheticEvent);
+            }}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            aria-label="Clear input"
+          >
+            <X size={16} />
+          </button>
+        )}
+        
         {loading && (
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+          <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         )}
-        {loaded && !loading && !error && (
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
+        
+        {/* Suggestions dropdown */}
+        {isFocused && suggestions.length > 0 && (
+          <div 
+            ref={suggestionsRef}
+            className="absolute z-10 w-full bg-white shadow-lg border rounded-md mt-1 max-h-60 overflow-auto"
+          >
+            {suggestions.map((place) => (
+              <div
+                key={place.id}
+                className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                onClick={() => handleSelectPlace(place)}
+              >
+                <div className="font-medium">{place.displayName.text}</div>
+                <div className="text-sm text-gray-500">{place.formattedAddress}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -126,7 +184,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={handleRetry}
+                onClick={() => search(inputValue)}
                 disabled={loading}
                 className="ml-auto"
               >
@@ -136,13 +194,6 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
             </div>
           </AlertDescription>
         </Alert>
-      )}
-      
-      {loaded && !error && (
-        <p className="text-xs text-green-600 flex items-center gap-1">
-          <CheckCircle2 className="h-3 w-3" />
-          Location search ready
-        </p>
       )}
       
       <p className="text-xs text-muted-foreground">
