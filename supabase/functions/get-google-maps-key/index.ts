@@ -67,8 +67,33 @@ serve(async (req) => {
 
       console.log(`Fetching place autocomplete results for: ${query}`);
       
+      // Get user location from request parameters, if available
+      const userLat = parseFloat(url.searchParams.get('lat') || '0');
+      const userLng = parseFloat(url.searchParams.get('lng') || '0');
+      const hasLocation = !isNaN(userLat) && !isNaN(userLng) && (userLat !== 0 || userLng !== 0);
+      
       try {
-        // Call the Places API (NEW) with corrected radius parameter
+        // Prepare the request body with improved parameters
+        const requestBody = {
+          textQuery: query,
+          languageCode: "en",
+          maxResultCount: 5,
+          locationBias: {
+            circle: {
+              center: {
+                latitude: hasLocation ? userLat : 0,
+                longitude: hasLocation ? userLng : 0
+              },
+              radius: 50000.0 // Maximum allowed radius in meters
+            }
+          },
+          // Include more fields for better results
+          includedTypes: ["locality", "sublocality", "administrative_area_level_1", "administrative_area_level_2", "country"]
+        };
+        
+        console.log(`Using location bias: ${hasLocation ? 'User location' : 'Default location'}`);
+        
+        // Call the Places API with optimized parameters
         const placesResponse = await fetch(
           `https://places.googleapis.com/v1/places:searchText`,
           {
@@ -76,23 +101,9 @@ serve(async (req) => {
             headers: {
               'Content-Type': 'application/json',
               'X-Goog-Api-Key': apiKey,
-              'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress'
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.types'
             },
-            body: JSON.stringify({
-              textQuery: query,
-              languageCode: "en",
-              maxResultCount: 5, // Request multiple results
-              locationBias: {
-                circle: {
-                  center: {
-                    // Use default center that can be overridden by user's location
-                    latitude: 0,
-                    longitude: 0
-                  },
-                  radius: 50000.0 // Fixed: Use maximum allowed radius of 50000 meters
-                }
-              }
-            })
+            body: JSON.stringify(requestBody)
           }
         );
 
@@ -104,6 +115,7 @@ serve(async (req) => {
         
         const placesData = await placesResponse.json();
         console.log('Places API response received successfully');
+        console.log(`Found ${placesData.places?.length || 0} places`);
         
         return new Response(
           JSON.stringify({

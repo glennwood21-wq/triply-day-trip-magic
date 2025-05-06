@@ -2,12 +2,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, AlertCircle, Loader2, CheckCircle2, X } from 'lucide-react';
+import { MapPin, AlertCircle, Loader2, CheckCircle2, X, Search } from 'lucide-react';
 import usePlacesAutocomplete from '@/hooks/usePlacesAutocomplete';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useDebounce } from '@/hooks/useDebounce';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 
 interface StartLocationInputProps {
   value: string;
@@ -19,35 +24,36 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const { toast } = useToast();
   const [inputValue, setInputValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
-  const debouncedInputValue = useDebounce(inputValue, 300);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   
-  // Setup Places autocomplete
-  const { suggestions, loading, error, search, clearSuggestions } = usePlacesAutocomplete({
-    onPlaceSelect: (place) => {
-      if (place.formattedAddress && onLocationSelect) {
-        onLocationSelect(place.formattedAddress);
-        
-        // Also update via the onChange handler to ensure the input value is updated
-        const syntheticEvent = {
-          target: {
-            name: "startLocation",
-            value: place.formattedAddress
-          }
-        } as unknown as React.ChangeEvent<HTMLInputElement>;
-        
-        onChange(syntheticEvent);
-        setInputValue(place.formattedAddress);
-        clearSuggestions();
-      }
-    }
+  // Setup Places autocomplete with improved configuration
+  const { 
+    suggestions, 
+    loading, 
+    error, 
+    search, 
+    clearSuggestions,
+    searchImmediately
+  } = usePlacesAutocomplete({
+    debounceMs: 400, // Increased debounce time for better performance
+    minChars: 3      // Only search when user has typed at least 3 characters
   });
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
+    const newValue = e.target.value;
+    setInputValue(newValue);
     onChange(e);
+    
+    if (newValue.trim()) {
+      search(newValue);
+      setDropdownOpen(true);
+    } else {
+      clearSuggestions();
+      setDropdownOpen(false);
+    }
   };
 
   // Handle place selection
@@ -66,7 +72,20 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
     onChange(syntheticEvent);
     setInputValue(place.formattedAddress);
     clearSuggestions();
+    setDropdownOpen(false);
     setIsFocused(false);
+    
+    toast({
+      description: `Selected ${place.displayName.text}`,
+    });
+  };
+
+  // Handle manually searching when user clicks search button
+  const handleManualSearch = () => {
+    if (inputValue.trim().length >= 3) {
+      searchImmediately(inputValue);
+      setDropdownOpen(true);
+    }
   };
 
   // Handle outside click
@@ -78,7 +97,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         inputRef.current && 
         !inputRef.current.contains(event.target as Node)
       ) {
-        setIsFocused(false);
+        setDropdownOpen(false);
       }
     };
 
@@ -88,26 +107,6 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
     };
   }, []);
 
-  // Search for places when the input changes
-  useEffect(() => {
-    if (debouncedInputValue) {
-      search(debouncedInputValue);
-    } else {
-      clearSuggestions();
-    }
-  }, [debouncedInputValue, search, clearSuggestions]);
-
-  // Show error toast when API error occurs
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: 'Location Service Issue',
-        description: 'Search suggestions may be limited. You can still enter a location manually.',
-        variant: 'destructive',
-      });
-    }
-  }, [error, toast]);
-
   return (
     <div className="space-y-2">
       <Label htmlFor="startLocation" className="flex items-center gap-2">
@@ -115,47 +114,70 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         Start Location
       </Label>
       <div className="relative">
-        <Input
-          id="startLocation"
-          name="startLocation"
-          placeholder="Enter your starting point (city, landmark, address)"
-          value={inputValue}
-          onChange={handleInputChange}
-          onFocus={() => setIsFocused(true)}
-          ref={inputRef}
-          className={`focus:border-primary focus:ring-primary ${error ? 'border-red-400' : ''}`}
-          aria-invalid={!!error}
-        />
-        
-        {inputValue && (
-          <button
-            type="button"
-            onClick={() => {
-              setInputValue('');
-              clearSuggestions();
-              const syntheticEvent = {
-                target: {
-                  name: "startLocation",
-                  value: ""
-                }
-              } as unknown as React.ChangeEvent<HTMLInputElement>;
-              onChange(syntheticEvent);
+        <div className="relative flex items-center">
+          <Input
+            id="startLocation"
+            name="startLocation"
+            placeholder="Enter your starting point (city, landmark, address)"
+            value={inputValue}
+            onChange={handleInputChange}
+            onFocus={() => setIsFocused(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleManualSearch();
+                e.preventDefault();
+              }
             }}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            aria-label="Clear input"
-          >
-            <X size={16} />
-          </button>
-        )}
-        
-        {loading && (
-          <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ref={inputRef}
+            className={`pr-16 focus:border-primary focus:ring-primary ${error ? 'border-red-400' : ''}`}
+            aria-invalid={!!error}
+          />
+          
+          <div className="absolute right-2 flex items-center space-x-1">
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              inputValue && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setInputValue('');
+                    clearSuggestions();
+                    setDropdownOpen(false);
+                    const syntheticEvent = {
+                      target: {
+                        name: "startLocation",
+                        value: ""
+                      }
+                    } as unknown as React.ChangeEvent<HTMLInputElement>;
+                    onChange(syntheticEvent);
+                  }}
+                  className="h-6 w-6 text-gray-400 hover:text-gray-600"
+                  aria-label="Clear input"
+                >
+                  <X size={16} />
+                </Button>
+              )
+            )}
+            
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleManualSearch}
+              disabled={loading || inputValue.trim().length < 3}
+              className="h-6 w-6 text-gray-600"
+              aria-label="Search"
+            >
+              <Search size={16} />
+            </Button>
           </div>
-        )}
+        </div>
         
         {/* Suggestions dropdown with improved display */}
-        {isFocused && suggestions.length > 0 && (
+        {dropdownOpen && suggestions.length > 0 && (
           <div 
             ref={suggestionsRef}
             className="absolute z-10 w-full bg-white shadow-lg border rounded-md mt-1 max-h-60 overflow-auto"
@@ -168,8 +190,22 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
               >
                 <div className="font-medium">{place.displayName.text}</div>
                 <div className="text-sm text-gray-500">{place.formattedAddress}</div>
+                {place.types && place.types.length > 0 && (
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {place.types[0].replace(/_/g, ' ')}
+                  </div>
+                )}
               </div>
             ))}
+          </div>
+        )}
+        
+        {dropdownOpen && !loading && suggestions.length === 0 && inputValue.trim().length >= 3 && (
+          <div 
+            ref={suggestionsRef}
+            className="absolute z-10 w-full bg-white shadow-lg border rounded-md mt-1 p-3 text-center"
+          >
+            <p className="text-gray-500">No locations found</p>
           </div>
         )}
       </div>
@@ -184,8 +220,8 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => search(inputValue)}
-                disabled={loading}
+                onClick={() => searchImmediately(inputValue)}
+                disabled={loading || inputValue.trim().length < 3}
                 className="ml-auto"
               >
                 {loading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
