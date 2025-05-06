@@ -71,34 +71,44 @@ const useTripSettings = () => {
       
       // If we have a trip ID, fetch the trip data
       const fetchTripData = async () => {
-        const { data, error } = await supabase
-          .from('trips')
-          .select('*')
-          .eq('id', id)
-          .single();
-          
-        if (data && !error) {
-          // Pre-fill the location from the trip data if available
-          const tripData = data as TripData;
-          
-          // Try to parse settings from the description field if available
-          let parsedSettings: Partial<TripSettings> = {};
-          
-          if (tripData.description) {
-            try {
-              // Try to parse JSON from description
-              parsedSettings = JSON.parse(tripData.description);
-            } catch (e) {
-              console.error("Could not parse settings from description:", e);
+        setLoading(true);
+        try {
+          const { data, error } = await supabase
+            .from('trips')
+            .select('*')
+            .eq('id', id)
+            .single();
+            
+          if (data && !error) {
+            // Pre-fill the location from the trip data if available
+            const tripData = data as TripData;
+            console.log("Trip data fetched:", tripData);
+            
+            // Try to parse settings from the description field if available
+            let parsedSettings: Partial<TripSettings> = {};
+            
+            if (tripData.description) {
+              try {
+                // Try to parse JSON from description
+                parsedSettings = JSON.parse(tripData.description);
+                console.log("Parsed settings from description:", parsedSettings);
+              } catch (e) {
+                console.error("Could not parse settings from description:", e);
+              }
             }
+            
+            // Update the trip settings with data from the database
+            // Prioritize the location from the database if available
+            setTripSettings(prev => ({
+              ...prev,
+              ...parsedSettings,
+              startLocation: tripData.location || parsedSettings.startLocation || ''
+            }));
           }
-          
-          // Update the trip settings with data from the database
-          setTripSettings(prev => ({
-            ...prev,
-            startLocation: tripData.location || '',
-            ...parsedSettings
-          }));
+        } catch (error) {
+          console.error("Error fetching trip data:", error);
+        } finally {
+          setLoading(false);
         }
       };
       

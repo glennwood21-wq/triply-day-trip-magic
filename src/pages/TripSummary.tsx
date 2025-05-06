@@ -41,6 +41,12 @@ const TripSummary = () => {
     tripSettings
   } = useTripSettings();
   
+  // Debug the starting location
+  useEffect(() => {
+    console.log("Current trip settings:", tripSettings);
+    console.log("Starting location:", tripSettings.startLocation);
+  }, [tripSettings]);
+  
   // On initial load, check if we already have a generated itinerary
   useEffect(() => {
     const checkExistingItinerary = async () => {
@@ -48,16 +54,23 @@ const TripSummary = () => {
         try {
           const { data, error } = await supabase
             .from('trips')
-            .select('description')
+            .select('description, location')
             .eq('id', tripId)
             .single();
             
           if (error) throw error;
           
+          console.log("Trip data from database:", data);
+          
           if (data?.description) {
-            const parsedDescription = JSON.parse(data.description);
-            if (parsedDescription.generatedItinerary) {
-              setItinerary(parsedDescription.generatedItinerary);
+            // Try to parse the description for generated itinerary
+            try {
+              const parsedDescription = JSON.parse(data.description);
+              if (parsedDescription.generatedItinerary) {
+                setItinerary(parsedDescription.generatedItinerary);
+              }
+            } catch (e) {
+              console.error("Error parsing description:", e);
             }
           }
         } catch (error) {
@@ -343,7 +356,7 @@ IMPORTANT GUIDELINES:
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">Starting Location</p>
-                        <p className="font-medium">{tripSettings.startLocation || 'Not set yet'}</p>
+                        <p className="font-medium">{tripSettings.startLocation ? tripSettings.startLocation : 'Not set yet'}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Trip Duration</p>
