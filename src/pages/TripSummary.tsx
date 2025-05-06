@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardNavbar from '@/components/DashboardNavbar';
@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Rocket } from 'lucide-react';
 import useTripSettings from '@/hooks/useTripSettings';
+import TripItineraryDisplay from '@/components/TripItineraryDisplay';
 
 interface TripItinerary {
   title: string;
@@ -32,12 +33,42 @@ const TripSummary = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [generatingTrip, setGeneratingTrip] = useState(false);
+  const [savingTrip, setSavingTrip] = useState(false);
+  const [itinerary, setItinerary] = useState<TripItinerary | null>(null);
   
   // Get trip settings from the custom hook
   const {
     tripId,
     tripSettings
   } = useTripSettings();
+  
+  // On initial load, check if we already have a generated itinerary
+  useEffect(() => {
+    const checkExistingItinerary = async () => {
+      if (tripId) {
+        try {
+          const { data, error } = await supabase
+            .from('trips')
+            .select('description')
+            .eq('id', tripId)
+            .single();
+            
+          if (error) throw error;
+          
+          if (data?.description) {
+            const parsedDescription = JSON.parse(data.description);
+            if (parsedDescription.generatedItinerary) {
+              setItinerary(parsedDescription.generatedItinerary);
+            }
+          }
+        } catch (error) {
+          console.error("Error loading existing itinerary:", error);
+        }
+      }
+    };
+    
+    checkExistingItinerary();
+  }, [tripId]);
   
   const goBack = () => {
     navigate('/trip-additional-preferences' + (tripId ? `?tripId=${tripId}` : ''));
@@ -90,6 +121,9 @@ const TripSummary = () => {
         throw new Error(data.error || 'Failed to generate trip');
       }
       
+      // Set the itinerary in state
+      setItinerary(data.itinerary);
+      
       // Store the generated itinerary in the database
       if (tripId) {
         const { error: updateError } = await supabase
@@ -110,9 +144,6 @@ const TripSummary = () => {
         title: "Trip Generated Successfully",
         description: "Your custom trip itinerary has been created!",
       });
-      
-      // Navigate to dashboard
-      navigate('/dashboard');
     } catch (error: any) {
       toast({
         title: "Error",
@@ -123,6 +154,63 @@ const TripSummary = () => {
     } finally {
       setLoading(false);
       setGeneratingTrip(false);
+    }
+  };
+  
+  const saveTrip = async () => {
+    setSavingTrip(true);
+    
+    try {
+      // Check if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to save your trip.",
+          variant: "destructive",
+        });
+        navigate('/auth');
+        return;
+      }
+      
+      if (!itinerary) {
+        throw new Error("No itinerary to save");
+      }
+      
+      // If we have a trip ID, update the trip with completed status
+      if (tripId) {
+        const { error } = await supabase
+          .from('trips')
+          .update({
+            title: itinerary.title,
+            status: 'completed',
+            description: JSON.stringify({
+              ...tripSettings,
+              generatedItinerary: itinerary
+            })
+          })
+          .eq('id', tripId);
+          
+        if (error) throw error;
+        
+        toast({
+          title: "Trip Saved",
+          description: "Your trip has been saved successfully!",
+        });
+        
+        // Navigate to dashboard
+        navigate('/dashboard');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save trip.",
+        variant: "destructive",
+      });
+      console.error("Trip save error:", error);
+    } finally {
+      setSavingTrip(false);
     }
   };
   
@@ -222,137 +310,147 @@ IMPORTANT GUIDELINES:
       
       <main className="flex-grow py-8 px-4 bg-gray-50">
         <div className="container-custom">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <h1 className="text-3xl font-bold mb-8">Trip Summary</h1>
             
-            <Card>
-              <CardHeader>
-                <CardTitle>Review Your Trip Details</CardTitle>
-              </CardHeader>
-              
-              <CardContent className="space-y-8">
-                {/* Basic Trip Information */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Starting Location</p>
-                      <p className="font-medium">{tripSettings.startLocation || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Trip Duration</p>
-                      <p className="font-medium">{tripSettings.duration} hours</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Return to Start</p>
-                      <p className="font-medium">{formatBoolean(tripSettings.returnToStart)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Transportation</p>
-                      <p className="font-medium capitalize">{tripSettings.transportType}</p>
-                    </div>
-                    
-                    {/* Destination Information */}
-                    {tripSettings.pointSpecificationType === 'specification' && (
+            {itinerary ? (
+              <TripItineraryDisplay 
+                itinerary={itinerary} 
+                onSave={saveTrip} 
+                onRegenerate={generateTrip}
+                isSaving={savingTrip}
+                isRegenerating={generatingTrip}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Review Your Trip Details</CardTitle>
+                </CardHeader>
+                
+                <CardContent className="space-y-8">
+                  {/* Basic Trip Information */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-gray-500">
-                          {tripSettings.returnToStart ? 'Furthest Point' : 'End Point'}
-                        </p>
-                        <p className="font-medium">{tripSettings.pointSpecification || 'Not specified'}</p>
+                        <p className="text-sm text-gray-500">Starting Location</p>
+                        <p className="font-medium">{tripSettings.startLocation || 'Not specified'}</p>
                       </div>
-                    )}
-                    
-                    {tripSettings.pointSpecificationType === 'distance' && (
                       <div>
-                        <p className="text-sm text-gray-500">Maximum Distance</p>
-                        <p className="font-medium">{tripSettings.distanceValue} miles</p>
+                        <p className="text-sm text-gray-500">Trip Duration</p>
+                        <p className="font-medium">{tripSettings.duration} hours</p>
                       </div>
-                    )}
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                {/* Stop Preferences */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Stops & Activities</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Maximum Stops</p>
-                      <p className="font-medium">{tripSettings.maxStops}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Food Stops</p>
-                      <p className="font-medium">{tripSettings.foodStops}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-sm text-gray-500">Stop Types</p>
-                      <p className="font-medium">{formatList(tripSettings.stopTypes)}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-sm text-gray-500">Food Preferences</p>
-                      <p className="font-medium">{formatList(tripSettings.foodPreferences)}</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                {/* Additional Preferences */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Additional Preferences</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Traveling with Kids</p>
-                      <p className="font-medium">{formatBoolean(tripSettings.travelingWithKids)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Traveling with Pets</p>
-                      <p className="font-medium">{formatBoolean(tripSettings.travelingWithPets)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Weather Sensitive</p>
-                      <p className="font-medium">{formatBoolean(tripSettings.weatherSensitive)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Budget Level</p>
-                      <p className="font-medium capitalize">{tripSettings.budgetLevel}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Preference Type</p>
-                      <p className="font-medium capitalize">{tripSettings.preferenceType}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-sm text-gray-500">Accessibility Needs</p>
-                      <p className="font-medium">{formatList(tripSettings.accessibilityNeeds)}</p>
+                      <div>
+                        <p className="text-sm text-gray-500">Return to Start</p>
+                        <p className="font-medium">{formatBoolean(tripSettings.returnToStart)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Transportation</p>
+                        <p className="font-medium capitalize">{tripSettings.transportType}</p>
+                      </div>
+                      
+                      {/* Destination Information */}
+                      {tripSettings.pointSpecificationType === 'specification' && (
+                        <div>
+                          <p className="text-sm text-gray-500">
+                            {tripSettings.returnToStart ? 'Furthest Point' : 'End Point'}
+                          </p>
+                          <p className="font-medium">{tripSettings.pointSpecification || 'Not specified'}</p>
+                        </div>
+                      )}
+                      
+                      {tripSettings.pointSpecificationType === 'distance' && (
+                        <div>
+                          <p className="text-sm text-gray-500">Maximum Distance</p>
+                          <p className="font-medium">{tripSettings.distanceValue} miles</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-                
-                {/* Navigation Buttons */}
-                <div className="flex justify-between pt-4">
-                  <Button 
-                    type="button" 
-                    variant="outline"
-                    onClick={goBack}
-                    className="flex items-center gap-2"
-                    disabled={generatingTrip}
-                  >
-                    <ArrowLeft size={16} />
-                    Back to Preferences
-                  </Button>
                   
-                  <Button 
-                    onClick={generateTrip}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                    disabled={loading}
-                  >
-                    {generatingTrip ? 'Generating...' : 'Generate My Trip'} 
-                    <Rocket size={16} />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <Separator />
+                  
+                  {/* Stop Preferences */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Stops & Activities</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Maximum Stops</p>
+                        <p className="font-medium">{tripSettings.maxStops}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Food Stops</p>
+                        <p className="font-medium">{tripSettings.foodStops}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-sm text-gray-500">Stop Types</p>
+                        <p className="font-medium">{formatList(tripSettings.stopTypes)}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-sm text-gray-500">Food Preferences</p>
+                        <p className="font-medium">{formatList(tripSettings.foodPreferences)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  {/* Additional Preferences */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Additional Preferences</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Traveling with Kids</p>
+                        <p className="font-medium">{formatBoolean(tripSettings.travelingWithKids)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Traveling with Pets</p>
+                        <p className="font-medium">{formatBoolean(tripSettings.travelingWithPets)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Weather Sensitive</p>
+                        <p className="font-medium">{formatBoolean(tripSettings.weatherSensitive)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Budget Level</p>
+                        <p className="font-medium capitalize">{tripSettings.budgetLevel}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Preference Type</p>
+                        <p className="font-medium capitalize">{tripSettings.preferenceType}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-sm text-gray-500">Accessibility Needs</p>
+                        <p className="font-medium">{formatList(tripSettings.accessibilityNeeds)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Navigation Buttons */}
+                  <div className="flex justify-between pt-4">
+                    <Button 
+                      type="button" 
+                      variant="outline"
+                      onClick={goBack}
+                      className="flex items-center gap-2"
+                      disabled={generatingTrip}
+                    >
+                      <ArrowLeft size={16} />
+                      Back to Preferences
+                    </Button>
+                    
+                    <Button 
+                      onClick={generateTrip}
+                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                      disabled={loading}
+                    >
+                      {generatingTrip ? 'Generating...' : 'Generate My Trip'} 
+                      <Rocket size={16} />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </main>
