@@ -23,13 +23,22 @@ serve(async (req) => {
       throw new Error('Prompt is required');
     }
 
-    // Log that we're about to make the API call and check if we have a key
+    // Log diagnostic information
     console.log('Sending prompt to OpenAI:', prompt);
+    console.log('API key status:', openAIApiKey ? 'API key is set' : 'API key is missing');
+    
+    // Validate API key
     if (!openAIApiKey) {
       console.error('OpenAI API key is not configured');
       throw new Error('OpenAI API key is not configured. Please set the OPENAI_API_KEY secret in your Supabase project.');
     }
+    
+    // Mask the API key for logging purposes (show first 5 chars)
+    const maskedKey = openAIApiKey.substring(0, 5) + '...' + openAIApiKey.substring(openAIApiKey.length - 4);
+    console.log('Using API key starting with:', maskedKey);
 
+    // Make the request to OpenAI
+    console.log('Sending request to OpenAI API...');
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -77,18 +86,22 @@ serve(async (req) => {
       }),
     });
 
+    // Check for API response issues
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('OpenAI API error:', errorData);
+      console.error('OpenAI API error details:', errorData);
       throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
     }
 
+    // Process successful response
+    console.log('Received successful response from OpenAI');
     const data = await response.json();
     let itinerary;
     
     try {
       // Extract the content from OpenAI response
       const content = data.choices[0].message.content;
+      console.log('Raw content from OpenAI:', content.substring(0, 200) + '...');
       
       // Attempt to parse the JSON response
       itinerary = JSON.parse(content);
@@ -115,9 +128,12 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error('Error in generate-trip function:', error);
+    // Include more details about the error
     return new Response(JSON.stringify({ 
       success: false, 
-      error: error.message 
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      details: error.stack || 'No stack trace available'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
