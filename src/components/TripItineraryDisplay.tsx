@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { Map, Save, RefreshCw } from 'lucide-react';
+import { Map, Save, RefreshCw, Clock, Navigation, Calendar, Coffee, Utensils, Camera, Landmark, Mountain, ShoppingBag } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Badge } from '@/components/ui/badge';
 
 interface TripItinerary {
   title: string;
@@ -22,6 +23,7 @@ interface TripStop {
   suggestedDuration: string;
   distanceFromPrevious: string;
   travelTimeFromPrevious: string;
+  imagePrompt?: string; // Optional field for image generation
 }
 
 interface TripItineraryDisplayProps {
@@ -39,7 +41,7 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
   isSaving,
   isRegenerating
 }) => {
-  // Calculate total trip time
+  // Calculate total trip info
   const totalTripInfo = useMemo(() => {
     if (!itinerary.stops || itinerary.stops.length === 0) {
       return { totalDuration: 0, totalDistance: 0, totalTravelTime: 0 };
@@ -57,6 +59,36 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
       };
     }, { totalDuration: 0, totalDistance: 0, totalTravelTime: 0 });
   }, [itinerary.stops]);
+
+  // Helper function to get icon based on stop type
+  const getStopTypeIcon = (type: string) => {
+    switch (type.toLowerCase()) {
+      case 'food':
+        return <Utensils className="h-4 w-4" />;
+      case 'restaurant':
+        return <Utensils className="h-4 w-4" />;
+      case 'cafe':
+        return <Coffee className="h-4 w-4" />;
+      case 'attraction':
+        return <Camera className="h-4 w-4" />;
+      case 'historical':
+        return <Landmark className="h-4 w-4" />;
+      case 'scenic':
+        return <Mountain className="h-4 w-4" />;
+      case 'shopping':
+        return <ShoppingBag className="h-4 w-4" />;
+      default:
+        return <Landmark className="h-4 w-4" />;
+    }
+  };
+
+  // Format duration in hours and minutes
+  const formatDuration = (minutes: number) => {
+    if (minutes < 60) return `${minutes} mins`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMins = minutes % 60;
+    return remainingMins > 0 ? `${hours} hr ${remainingMins} min` : `${hours} hr`;
+  };
 
   // If there's a parsing error, show the raw content
   if (itinerary.rawContent) {
@@ -120,23 +152,32 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
         {/* Trip Overview */}
         <div className="bg-gray-50 p-4 rounded-md">
           <h3 className="text-lg font-semibold mb-2">Trip Overview</h3>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm text-gray-500">Total Time</p>
-              <p className="font-medium">{Math.round(totalTripInfo.totalDuration / 60)} hours {totalTripInfo.totalDuration % 60} mins</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center">
+              <Clock className="h-5 w-5 text-gray-600 mr-2" />
+              <div>
+                <p className="text-sm text-gray-500">Activity Time</p>
+                <p className="font-medium">{formatDuration(totalTripInfo.totalDuration)}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Total Distance</p>
-              <p className="font-medium">{totalTripInfo.totalDistance.toFixed(1)} miles</p>
+            <div className="flex items-center">
+              <Navigation className="h-5 w-5 text-gray-600 mr-2" />
+              <div>
+                <p className="text-sm text-gray-500">Total Distance</p>
+                <p className="font-medium">{totalTripInfo.totalDistance.toFixed(1)} miles</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Travel Time</p>
-              <p className="font-medium">{Math.round(totalTripInfo.totalTravelTime / 60)} hours {totalTripInfo.totalTravelTime % 60} mins</p>
+            <div className="flex items-center">
+              <Calendar className="h-5 w-5 text-gray-600 mr-2" />
+              <div>
+                <p className="text-sm text-gray-500">Travel Time</p>
+                <p className="font-medium">{formatDuration(totalTripInfo.totalTravelTime)}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Map Placeholder */}
+        {/* Map Preview */}
         <div className="relative h-64 bg-gray-100 rounded-md flex items-center justify-center border">
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
@@ -147,33 +188,59 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
           </div>
         </div>
 
-        {/* Itinerary Table */}
+        {/* Timeline View */}
         <div>
-          <h3 className="text-lg font-semibold mb-3">Itinerary Details</h3>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]">#</TableHead>
-                <TableHead>Stop</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Duration</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {itinerary.stops.map((stop, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>{stop.name}</TableCell>
-                  <TableCell>
-                    <span className="capitalize px-2 py-1 bg-gray-100 rounded-full text-xs">
-                      {stop.type}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">{stop.suggestedDuration} mins</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <h3 className="text-lg font-semibold mb-3">Trip Timeline</h3>
+          <div className="space-y-4">
+            {itinerary.stops.map((stop, index) => (
+              <div key={index} className="flex">
+                <div className="mr-4 relative">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary text-white">
+                    {index + 1}
+                  </div>
+                  {index < itinerary.stops.length - 1 && (
+                    <div className="absolute top-10 bottom-0 left-1/2 w-0.5 -ml-0.5 bg-gray-200" />
+                  )}
+                </div>
+                
+                <div className="flex-1 pb-8">
+                  <div className="bg-white rounded-md shadow-sm border p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-semibold text-lg">{stop.name}</h4>
+                        <Badge 
+                          variant="outline" 
+                          className="flex items-center gap-1 mt-1"
+                        >
+                          {getStopTypeIcon(stop.type)}
+                          <span className="capitalize">{stop.type}</span>
+                        </Badge>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium">{formatDuration(parseInt(stop.suggestedDuration))}</p>
+                        {index > 0 && (
+                          <p className="text-xs text-gray-500">{stop.distanceFromPrevious} miles</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <p className="text-sm text-gray-600 mb-2">{stop.location}</p>
+                    <p className="text-sm">{stop.description}</p>
+                    
+                    {index < itinerary.stops.length - 1 && (
+                      <div className="flex items-center mt-3 text-sm text-gray-500">
+                        <Navigation className="h-4 w-4 mr-1" />
+                        <span>
+                          {stop.travelTimeFromPrevious} min to next stop
+                          ({itinerary.stops[index + 1].name})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Detailed Stop Information */}
@@ -188,9 +255,13 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
                       {index + 1}
                     </span>
                     <span className="font-medium">{stop.name}</span>
-                    <span className="capitalize ml-3 px-2 py-1 bg-gray-100 rounded-full text-xs">
-                      {stop.type}
-                    </span>
+                    <Badge 
+                      variant="outline" 
+                      className="ml-3 flex items-center gap-1"
+                    >
+                      {getStopTypeIcon(stop.type)}
+                      <span className="capitalize">{stop.type}</span>
+                    </Badge>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
@@ -203,7 +274,7 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
                       </div>
                       <div>
                         <p className="text-gray-500">Suggested Duration</p>
-                        <p>{stop.suggestedDuration} minutes</p>
+                        <p>{formatDuration(parseInt(stop.suggestedDuration))}</p>
                       </div>
                       <div>
                         <p className="text-gray-500">Distance from Previous</p>

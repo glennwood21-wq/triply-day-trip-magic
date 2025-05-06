@@ -48,7 +48,8 @@ serve(async (req) => {
                   "description": "A fun and engaging description of what to do here written in a helpful, enthusiastic tone",
                   "suggestedDuration": "Time to spend in minutes",
                   "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
-                  "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)"
+                  "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)",
+                  "imagePrompt": "A detailed description for generating an image of this location"
                 },
                 ...
               ]
@@ -58,7 +59,8 @@ serve(async (req) => {
             Every stop must have all the fields listed above.
             Ensure exact field names as specified.
             Travel times and distances should be realistic based on the transportation method.
-            Include at least one food stop around a logical meal time.` 
+            Include at least one food stop around a logical meal time.
+            For the imagePrompt field, create a detailed, visual description that would help generate a representative image of the location.` 
           },
           { 
             role: 'user', 
