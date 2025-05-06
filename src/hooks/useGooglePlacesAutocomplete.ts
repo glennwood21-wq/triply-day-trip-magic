@@ -60,7 +60,7 @@ const useGooglePlacesAutocomplete = ({
     // Create script element with async loading for better performance
     const script = document.createElement('script');
     script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initPlacesAutocomplete&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initPlacesAutocomplete`;
     script.async = true;
     script.defer = true;
     script.onerror = (e) => {
@@ -108,6 +108,35 @@ const useGooglePlacesAutocomplete = ({
       setError(`Error initializing Places Autocomplete: ${err}`);
     }
   };
+
+  // Set up a global error handler for the Google Maps API
+  useEffect(() => {
+    // Add event listener for unhandled errors which might be from Google Maps
+    const handleError = (event: ErrorEvent) => {
+      // Check if this is a Google Maps API error
+      if (event.message && 
+          (event.message.includes('Google Maps') || 
+           event.message.includes('google.maps') || 
+           event.filename?.includes('maps.googleapis.com'))) {
+        
+        console.error('Google Maps API error caught:', event.message);
+        
+        // Don't break the app, just show an error
+        event.preventDefault();
+        
+        if (event.message.includes('ApiNotActivatedMapError')) {
+          setError('Google Maps API not activated. Please enable Places API in Google Cloud Console.');
+        } else {
+          setError(`Maps API error: ${event.message}`);
+        }
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    return () => {
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
 
   return { loaded, error };
 };

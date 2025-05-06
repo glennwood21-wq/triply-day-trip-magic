@@ -20,7 +20,22 @@ serve(async (req) => {
       console.error("Google Maps API key not found in environment variables");
       return new Response(
         JSON.stringify({ 
-          error: "Google Maps API key not configured",
+          error: "Google Maps API key not configured in Supabase secrets",
+          status: "error"
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Verify the API key format (simple validation)
+    if (!apiKey.startsWith('AIza')) {
+      console.error("Invalid Google Maps API key format");
+      return new Response(
+        JSON.stringify({ 
+          error: "Invalid Google Maps API key format",
           status: "error"
         }),
         {

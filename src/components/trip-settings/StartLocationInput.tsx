@@ -39,7 +39,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
       
       toast({
         title: 'Location Service Issue',
-        description: 'Search suggestions are not available. You can still enter a location manually.',
+        description: 'Search suggestions may be limited. You can still enter a location manually.',
         variant: 'destructive',
       });
     } finally {
@@ -101,7 +101,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           onChange={onChange}
           ref={inputRef}
           className={`focus:border-primary focus:ring-primary ${error ? 'border-red-400' : ''}`}
-          required
+          disabled={false} // Never disable the input
         />
         {loading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
