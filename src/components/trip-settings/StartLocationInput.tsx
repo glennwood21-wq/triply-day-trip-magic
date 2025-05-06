@@ -18,7 +18,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [apiKey, setApiKey] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -33,7 +33,14 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
 
       setLoading(true);
       try {
+        console.log('Attempting to fetch Google Maps API key');
         const key = await getGoogleMapsApiKey();
+        
+        // Check if key is valid
+        if (!key || key.trim() === '') {
+          throw new Error('Empty API key received');
+        }
+        
         console.log('API key fetched successfully (redacted for security)');
         setApiKey(key);
         setApiKeyError(null);
@@ -41,7 +48,8 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         setRetryCount(0);
         setIsInitialLoad(false);
       } catch (error) {
-        console.error('Failed to fetch Google Maps API key:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Failed to fetch Google Maps API key:', errorMessage);
         setApiKeyError('Failed to load location services. Please try again later.');
         setIsInitialLoad(false);
         
@@ -89,6 +97,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   // Combine API key errors with autocomplete errors
   const error = apiKeyError || autocompleteError;
 
+  // Show toast for autocomplete errors
   useEffect(() => {
     if (autocompleteError && !apiKeyError) {
       console.error('Google Places Autocomplete error:', autocompleteError);

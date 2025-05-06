@@ -12,6 +12,8 @@ export const getGoogleMapsApiKey = async (): Promise<string> => {
     
     while (retryCount < maxRetries) {
       try {
+        console.log(`Attempt ${retryCount + 1} to fetch Google Maps API key`);
+        
         const { data, error } = await supabase.functions.invoke('get-google-maps-key', {
           method: 'GET',
         });
@@ -21,12 +23,17 @@ export const getGoogleMapsApiKey = async (): Promise<string> => {
           throw new Error(`Failed to fetch API key: ${error.message}`);
         }
         
-        if (!data || !data.apiKey) {
-          console.error(`No API key returned from Edge Function (attempt ${retryCount + 1}):`, data);
-          throw new Error('No API key found. Please check your Supabase Edge Function configuration.');
+        if (!data) {
+          console.error(`No data returned from Edge Function (attempt ${retryCount + 1})`);
+          throw new Error('No data returned from Edge Function');
         }
         
-        console.log('API key fetched successfully');
+        if (!data.apiKey) {
+          console.error(`No API key in response (attempt ${retryCount + 1}):`, data);
+          throw new Error('No API key found in response. Please check your Supabase Edge Function configuration.');
+        }
+        
+        console.log('API key fetched successfully (redacted for security)');
         return data.apiKey;
       } catch (err) {
         lastError = err;

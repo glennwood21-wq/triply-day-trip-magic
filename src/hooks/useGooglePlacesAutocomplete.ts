@@ -19,17 +19,32 @@ const useGooglePlacesAutocomplete = ({
   const loadCallbackTimeoutRef = useRef<number | null>(null);
   const initializationAttemptedRef = useRef(false);
 
-  // Clear any existing autocomplete when API key changes
+  // Clear any existing autocomplete when API key changes or component unmounts
   useEffect(() => {
-    autocompleteRef.current = null;
+    // Reset initialization state when API key changes
+    if (autocompleteRef.current) {
+      console.log('API key changed, clearing existing autocomplete');
+      autocompleteRef.current = null;
+    }
+    
     initializationAttemptedRef.current = false;
+    scriptLoadAttemptedRef.current = false;
     
     // Reset the error state when API key changes
     if (apiKey) {
       setError(null);
+      setLoaded(false);
     }
+    
+    return () => {
+      // Clean up on unmount or API key change
+      if (loadCallbackTimeoutRef.current) {
+        window.clearTimeout(loadCallbackTimeoutRef.current);
+      }
+    };
   }, [apiKey]);
 
+  // Load Google Maps API script
   useEffect(() => {
     // If no API key is provided, set an error and return early
     if (!apiKey || apiKey.trim() === '') {
@@ -47,11 +62,14 @@ const useGooglePlacesAutocomplete = ({
     if (window.google && window.google.maps && window.google.maps.places) {
       console.log('Google Maps API already loaded, initializing autocomplete');
       setLoaded(true);
-      initAutocomplete();
+      setTimeout(() => {
+        initAutocomplete();
+      }, 100);
       return;
     }
 
     scriptLoadAttemptedRef.current = true;
+    console.log('Loading Google Maps script with API key');
 
     // Clear any existing callback timeout
     if (loadCallbackTimeoutRef.current) {
@@ -71,10 +89,6 @@ const useGooglePlacesAutocomplete = ({
     if (existingScript) {
       document.head.removeChild(existingScript);
     }
-
-    // Sanitize API key for logging (only show first 5 characters)
-    const sanitizedKey = apiKey.substring(0, 5) + '...';
-    console.log('Loading Google Maps API with key:', sanitizedKey);
 
     // Load the Google Maps Places API script
     const script = document.createElement('script');
@@ -100,27 +114,13 @@ const useGooglePlacesAutocomplete = ({
     }, 10000); // 10 second timeout
 
     return () => {
-      // Clean up the script and the global callback when the component unmounts
+      // Clean up the global callback when the component unmounts
       window.initPlacesAutocomplete = () => {};
       if (loadCallbackTimeoutRef.current) {
         window.clearTimeout(loadCallbackTimeoutRef.current);
       }
     };
   }, [apiKey, loaded, error]);
-
-  // Clean up function when the component unmounts
-  useEffect(() => {
-    return () => {
-      // Clean up script tag on unmount
-      const scriptToRemove = document.getElementById('google-maps-script');
-      if (scriptToRemove && scriptToRemove.parentNode) {
-        scriptToRemove.parentNode.removeChild(scriptToRemove);
-      }
-      
-      // Clear any existing autocomplete
-      autocompleteRef.current = null;
-    };
-  }, []);
 
   const initAutocomplete = () => {
     // Avoid initializing multiple times
@@ -129,6 +129,7 @@ const useGooglePlacesAutocomplete = ({
     }
     
     initializationAttemptedRef.current = true;
+    console.log('Attempting to initialize autocomplete, checking input ref');
     
     if (!inputRef.current) {
       console.log('Input ref not available yet, waiting to initialize autocomplete');
@@ -142,7 +143,7 @@ const useGooglePlacesAutocomplete = ({
     }
 
     try {
-      console.log('Initializing Google Places Autocomplete');
+      console.log('Input ref available, initializing Google Places Autocomplete');
       const options = {
         types: ['geocode', 'establishment'],
         fields: ['address_components', 'formatted_address', 'geometry', 'name'],
