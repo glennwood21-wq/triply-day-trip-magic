@@ -30,21 +30,8 @@ serve(async (req) => {
       );
     }
 
-    if (apiKey.trim() === "") {
-      console.error("Google Maps API key is empty");
-      return new Response(
-        JSON.stringify({ 
-          error: "Google Maps API key is empty",
-          status: "error"
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    console.log("Returning Google Maps API key successfully");
+    // Log success to help with debugging
+    console.log("Successfully retrieved Google Maps API key");
     
     return new Response(
       JSON.stringify({ 

@@ -12,6 +12,8 @@ import { Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import useGooglePlacesAutocomplete from '@/hooks/useGooglePlacesAutocomplete';
 import { getGoogleMapsApiKey } from '@/utils/apiKeys';
+import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const TripSetup = () => {
   const navigate = useNavigate();
@@ -23,8 +25,11 @@ const TripSetup = () => {
     interests: '',
     distance: '',
   });
+  
+  // Google Places API setup
   const [apiKey, setApiKey] = useState<string>('');
-  const [apiLoading, setApiLoading] = useState(false);
+  const [apiLoading, setApiLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const locationInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
@@ -44,15 +49,21 @@ const TripSetup = () => {
     // Fetch Google Maps API key
     const fetchApiKey = async () => {
       setApiLoading(true);
+      setApiError(null);
       try {
+        console.log('Fetching Google Maps API key for TripSetup');
         const key = await getGoogleMapsApiKey();
+        console.log('API key fetched successfully');
         setApiKey(key);
       } catch (error) {
-        console.error('Failed to fetch Google Maps API key:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Failed to fetch Google Maps API key:', errorMessage);
+        setApiError('Failed to load location services');
+        
         toast({
-          title: 'Warning',
-          description: 'Location autocomplete is not available. You can still enter location manually.',
-          variant: 'default',
+          title: 'Location Service Issue',
+          description: 'Search suggestions are not available. You can still enter a location manually.',
+          variant: 'destructive',
         });
       } finally {
         setApiLoading(false);
@@ -82,12 +93,29 @@ const TripSetup = () => {
     }
   };
 
-  // Initialize Google Places Autocomplete when API key is available
-  useGooglePlacesAutocomplete({
+  // Handle retry
+  const handleRetry = async () => {
+    setApiLoading(true);
+    setApiError(null);
+    try {
+      const key = await getGoogleMapsApiKey();
+      setApiKey(key);
+    } catch (error) {
+      setApiError('Failed to load location services');
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  // Initialize Google Places Autocomplete
+  const { error: placesError, loaded } = useGooglePlacesAutocomplete({
     apiKey,
     onPlaceSelect: handleLocationSelect,
     inputRef: locationInputRef,
   });
+
+  // Combine errors
+  const locationError = apiError || placesError;
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,13 +189,48 @@ const TripSetup = () => {
                         onChange={handleChange}
                         required
                         ref={locationInputRef}
+                        className={locationError ? 'border-red-400' : ''}
                       />
                       {apiLoading && (
                         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></div>
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                      {loaded && !apiLoading && !locationError && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
                         </div>
                       )}
                     </div>
+                    
+                    {locationError && (
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="flex flex-col text-sm gap-2">
+                          <span>{locationError}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs">You can still enter a location manually.</span>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={handleRetry}
+                              disabled={apiLoading}
+                              className="ml-auto"
+                            >
+                              {apiLoading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+                              Retry
+                            </Button>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    
+                    {loaded && !locationError && (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Location search ready
+                      </p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
