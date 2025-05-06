@@ -72,17 +72,14 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
 
   // Retry mechanism with manual trigger
   const handleRetry = () => {
-    setRetryCount(0);
+    setRetryCount(prev => prev + 1);
     setApiKeyError(null);
     fetchApiKey();
   };
 
   useEffect(() => {
-    // Only fetch API key if we don't have one or if we are retrying
-    if (!apiKey || retryCount > 0) {
-      fetchApiKey();
-    }
-  }, [apiKey, retryCount, fetchApiKey]);
+    fetchApiKey();
+  }, [retryCount, fetchApiKey]);
 
   const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
     if (place.formatted_address && onLocationSelect) {
