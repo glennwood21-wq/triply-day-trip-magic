@@ -7,13 +7,6 @@ interface PlacesAutocompleteProps {
   inputRef: React.RefObject<HTMLInputElement>;
 }
 
-declare global {
-  interface Window {
-    google: any;
-    initPlacesAutocomplete: () => void;
-  }
-}
-
 const useGooglePlacesAutocomplete = ({ 
   apiKey, 
   onPlaceSelect,
