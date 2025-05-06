@@ -16,12 +16,18 @@ const useGooglePlacesAutocomplete = ({
   const [error, setError] = useState<string | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const scriptLoadAttemptedRef = useRef(false);
+  const loadCallbackTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     // If no API key is provided, set an error and return early
     if (!apiKey || apiKey.trim() === '') {
       console.error('Google Maps API key is missing or empty');
       setError('Google Maps API key is missing. Please check your configuration.');
+      return;
+    }
+
+    // Only attempt to load the script once
+    if (scriptLoadAttemptedRef.current) {
       return;
     }
 
@@ -33,12 +39,12 @@ const useGooglePlacesAutocomplete = ({
       return;
     }
 
-    // Only attempt to load the script once
-    if (scriptLoadAttemptedRef.current) {
-      return;
-    }
-
     scriptLoadAttemptedRef.current = true;
+
+    // Clear any existing callback timeout
+    if (loadCallbackTimeoutRef.current) {
+      window.clearTimeout(loadCallbackTimeoutRef.current);
+    }
 
     // Define the callback function that will be called when the script loads
     window.initPlacesAutocomplete = () => {
@@ -69,15 +75,26 @@ const useGooglePlacesAutocomplete = ({
 
     document.head.appendChild(script);
 
+    // Set a timeout to detect if the callback doesn't execute
+    loadCallbackTimeoutRef.current = window.setTimeout(() => {
+      if (!loaded && !error) {
+        console.error('Google Maps API script loading timed out');
+        setError('Google Maps API loading timed out. Please check your API key or internet connection.');
+      }
+    }, 10000); // 10 second timeout
+
     return () => {
       // Clean up the script and the global callback when the component unmounts
       window.initPlacesAutocomplete = () => {};
+      if (loadCallbackTimeoutRef.current) {
+        window.clearTimeout(loadCallbackTimeoutRef.current);
+      }
       const scriptToRemove = document.getElementById('google-maps-script');
       if (scriptToRemove) {
         document.head.removeChild(scriptToRemove);
       }
     };
-  }, [apiKey]);
+  }, [apiKey, loaded, error]);
 
   const initAutocomplete = () => {
     if (!inputRef.current) {
@@ -90,6 +107,7 @@ const useGooglePlacesAutocomplete = ({
       const options = {
         types: ['geocode', 'establishment'],
         componentRestrictions: { country: 'us' }, // Limit to US, remove or change as needed
+        fields: ['address_components', 'formatted_address', 'geometry', 'name'],
       };
 
       autocompleteRef.current = new window.google.maps.places.Autocomplete(

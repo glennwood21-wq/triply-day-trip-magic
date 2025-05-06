@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, AlertCircle } from 'lucide-react';
+import { MapPin, AlertCircle, Loader2 } from 'lucide-react';
 import useGooglePlacesAutocomplete from '@/hooks/useGooglePlacesAutocomplete';
 import { getGoogleMapsApiKey } from '@/utils/apiKeys';
 import { useToast } from '@/hooks/use-toast';
@@ -21,9 +21,15 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const [loading, setLoading] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
 
   useEffect(() => {
     const fetchApiKey = async () => {
+      if (retryCount >= maxRetries) {
+        console.log(`Max retries (${maxRetries}) reached. Stopping API key fetch attempts.`);
+        return;
+      }
+
       setLoading(true);
       try {
         const key = await getGoogleMapsApiKey();
@@ -45,8 +51,8 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           });
         }
         
-        // Auto-retry up to 3 times with exponential backoff
-        if (retryCount < 3) {
+        // Auto-retry with exponential backoff
+        if (retryCount < maxRetries) {
           const timeout = setTimeout(() => {
             setRetryCount(prev => prev + 1);
           }, 1000 * Math.pow(2, retryCount));
@@ -62,7 +68,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
     if (!apiKey || retryCount > 0) {
       fetchApiKey();
     }
-  }, [toast, retryCount]);
+  }, [toast, retryCount, maxRetries]);
 
   const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
     if (place.formatted_address && onLocationSelect) {
@@ -71,7 +77,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   };
 
   // Only initialize the autocomplete when we have the API key
-  const { error: autocompleteError } = useGooglePlacesAutocomplete({
+  const { error: autocompleteError, loaded } = useGooglePlacesAutocomplete({
     apiKey,
     onPlaceSelect: handlePlaceSelect,
     inputRef,
@@ -81,7 +87,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const error = apiKeyError || autocompleteError;
 
   useEffect(() => {
-    if (autocompleteError) {
+    if (autocompleteError && !apiKeyError) {
       console.error('Google Places Autocomplete error:', autocompleteError);
       toast({
         title: 'Error',
@@ -89,7 +95,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         variant: 'destructive',
       });
     }
-  }, [autocompleteError, toast]);
+  }, [autocompleteError, apiKeyError, toast]);
 
   return (
     <div className="space-y-2">
@@ -111,7 +117,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         />
         {loading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <div className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></div>
+            <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
           </div>
         )}
       </div>
@@ -120,6 +126,11 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      )}
+      {loaded && !error && (
+        <p className="text-xs text-gray-500 mt-1">
+          <span className="text-green-600">✓</span> Location search ready
+        </p>
       )}
       <p className="text-xs text-gray-500">
         Provide a specific location for better trip planning results
