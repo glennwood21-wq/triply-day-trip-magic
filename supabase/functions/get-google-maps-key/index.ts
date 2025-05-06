@@ -68,7 +68,7 @@ serve(async (req) => {
       console.log(`Fetching place autocomplete results for: ${query}`);
       
       try {
-        // Call the Places API (NEW) with improved parameters for better matches
+        // Call the Places API (NEW) with corrected radius parameter
         const placesResponse = await fetch(
           `https://places.googleapis.com/v1/places:searchText`,
           {
@@ -89,7 +89,7 @@ serve(async (req) => {
                     latitude: 0,
                     longitude: 0
                   },
-                  radius: 20000000.0 // Large radius to avoid excessive bias
+                  radius: 50000.0 // Fixed: Use maximum allowed radius of 50000 meters
                 }
               }
             })
