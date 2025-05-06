@@ -4,7 +4,6 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Input } from '@/components/ui/input';
-import { FormItem, FormLabel, FormControl } from '@/components/ui/form';
 
 interface ReturnToStartToggleProps {
   returnToStart: boolean;
@@ -85,19 +84,17 @@ const ReturnToStartToggle = ({
             
             {pointSpecificationType === 'specification' && (
               <div className="ml-6 mt-2">
-                <FormItem className="space-y-1">
-                  <FormLabel>
+                <div className="space-y-1">
+                  <Label>
                     Enter {returnToStart ? 'furthest point' : 'end point'} location:
-                  </FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="text" 
-                      placeholder="e.g. Los Angeles, CA"
-                      value={localPointSpecification}
-                      onChange={handlePointSpecificationChange}
-                    />
-                  </FormControl>
-                </FormItem>
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="e.g. Los Angeles, CA"
+                    value={localPointSpecification}
+                    onChange={handlePointSpecificationChange}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -112,20 +109,18 @@ const ReturnToStartToggle = ({
             
             {pointSpecificationType === 'distance' && (
               <div className="ml-6 mt-2">
-                <FormItem className="space-y-1">
-                  <FormLabel>
+                <div className="space-y-1">
+                  <Label>
                     Maximum distance (miles):
-                  </FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      min="0"
-                      placeholder="e.g. 100"
-                      value={localDistanceValue || ''}
-                      onChange={handleDistanceValueChange}
-                    />
-                  </FormControl>
-                </FormItem>
+                  </Label>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    placeholder="e.g. 100"
+                    value={localDistanceValue || ''}
+                    onChange={handleDistanceValueChange}
+                  />
+                </div>
               </div>
             )}
           </div>
