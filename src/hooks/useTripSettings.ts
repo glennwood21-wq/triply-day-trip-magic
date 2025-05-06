@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,12 +9,15 @@ interface TripSettings {
   returnToStart: boolean;
   pointSpecificationType: string;
   transportType: string;
-  // New preference fields
+  // Point specification fields
+  pointSpecification?: string;
+  distanceValue?: number;
+  // Preference fields
   stopTypes?: string[];
   maxStops?: number;
   foodStops?: number;
   foodPreferences?: string[];
-  // New additional preference fields
+  // Additional preference fields
   travelingWithKids?: boolean;
   travelingWithPets?: boolean;
   accessibilityNeeds?: string[];
@@ -44,6 +48,8 @@ const useTripSettings = () => {
     returnToStart: true,
     pointSpecificationType: 'distance',
     transportType: 'car',
+    pointSpecification: '',
+    distanceValue: 100,
     stopTypes: [],
     maxStops: 5,
     foodStops: 2,
@@ -129,6 +135,20 @@ const useTripSettings = () => {
     });
   };
 
+  const handlePointSpecificationChange = (value: string) => {
+    setTripSettings({
+      ...tripSettings,
+      pointSpecification: value
+    });
+  };
+
+  const handleDistanceValueChange = (value: number) => {
+    setTripSettings({
+      ...tripSettings,
+      distanceValue: value
+    });
+  };
+
   return {
     tripId,
     tripSettings,
@@ -138,6 +158,8 @@ const useTripSettings = () => {
     handleSliderChange,
     handleSwitchChange,
     handleRadioChange,
+    handlePointSpecificationChange,
+    handleDistanceValueChange,
     setTripSettings
   };
 };

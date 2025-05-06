@@ -26,7 +26,9 @@ const TripSettings = () => {
     handleInputChange,
     handleSliderChange,
     handleSwitchChange,
-    handleRadioChange
+    handleRadioChange,
+    handlePointSpecificationChange,
+    handleDistanceValueChange
   } = useTripSettings();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -133,6 +135,10 @@ const TripSettings = () => {
                     onReturnChange={handleSwitchChange}
                     pointSpecificationType={tripSettings.pointSpecificationType}
                     onPointTypeChange={(value) => handleRadioChange('pointSpecificationType', value)}
+                    pointSpecification={tripSettings.pointSpecification}
+                    onPointSpecificationChange={handlePointSpecificationChange}
+                    distanceValue={tripSettings.distanceValue}
+                    onDistanceValueChange={handleDistanceValueChange}
                   />
                   
                   {/* Transport Type */}
