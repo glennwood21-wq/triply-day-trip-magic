@@ -23,19 +23,21 @@ serve(async (req) => {
       throw new Error('Prompt is required');
     }
 
-    // Log diagnostic information
-    console.log('Sending prompt to OpenAI:', prompt);
-    console.log('API key status:', openAIApiKey ? 'API key is set' : 'API key is missing');
+    // Debug API key info (carefully)
+    console.log('Request received with prompt length:', prompt.length);
     
-    // Validate API key
+    // Validate API key format - basic check that it has expected structure
     if (!openAIApiKey) {
-      console.error('OpenAI API key is not configured');
+      console.error('OpenAI API key is not set in environment variables');
       throw new Error('OpenAI API key is not configured. Please set the OPENAI_API_KEY secret in your Supabase project.');
     }
     
-    // Mask the API key for logging purposes (show first 5 chars)
-    const maskedKey = openAIApiKey.substring(0, 5) + '...' + openAIApiKey.substring(openAIApiKey.length - 4);
-    console.log('Using API key starting with:', maskedKey);
+    if (!openAIApiKey.startsWith('sk-') || openAIApiKey.length < 20) {
+      console.error('OpenAI API key appears to be in invalid format (should start with sk- and be sufficiently long)');
+      throw new Error('OpenAI API key appears to be invalid. Please check the OPENAI_API_KEY secret in your Supabase project.');
+    }
+    
+    console.log('Using valid OpenAI API key format, first 4 chars:', openAIApiKey.substring(0, 4));
 
     // Make the request to OpenAI
     console.log('Sending request to OpenAI API...');
@@ -86,11 +88,23 @@ serve(async (req) => {
       }),
     });
 
+    // Debug response status before parsing
+    console.log('OpenAI API response status:', response.status);
+    
     // Check for API response issues
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('OpenAI API error details:', errorData);
-      throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+      const errorText = await response.text();
+      console.error('OpenAI API error raw response:', errorText);
+      
+      // Try to parse as JSON if possible
+      try {
+        const errorData = JSON.parse(errorText);
+        console.error('OpenAI API error details:', errorData);
+        throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+      } catch (parseError) {
+        // If can't parse as JSON, use the text directly
+        throw new Error(`OpenAI API error: ${errorText.substring(0, 200)}`);
+      }
     }
 
     // Process successful response
@@ -101,7 +115,7 @@ serve(async (req) => {
     try {
       // Extract the content from OpenAI response
       const content = data.choices[0].message.content;
-      console.log('Raw content from OpenAI:', content.substring(0, 200) + '...');
+      console.log('Raw content from OpenAI (first 100 chars):', content.substring(0, 100));
       
       // Attempt to parse the JSON response
       itinerary = JSON.parse(content);
