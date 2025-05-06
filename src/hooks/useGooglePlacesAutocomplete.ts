@@ -47,9 +47,16 @@ const useGooglePlacesAutocomplete = ({
   // Load Google Maps API script with proper API key validation
   useEffect(() => {
     // If no API key is provided, set an error and return early
-    if (!apiKey || apiKey.trim() === '') {
-      console.error('Google Maps API key is missing or empty');
-      setError('Google Maps API key is missing. Please check your configuration.');
+    if (!apiKey) {
+      console.error('No Google Maps API key provided');
+      setError('Google Maps API key is required');
+      setLoaded(false);
+      return;
+    }
+
+    if (apiKey.trim() === '') {
+      console.error('Empty Google Maps API key provided');
+      setError('Google Maps API key cannot be empty');
       setLoaded(false);
       return;
     }
@@ -152,19 +159,33 @@ const useGooglePlacesAutocomplete = ({
         fields: ['address_components', 'formatted_address', 'geometry', 'name'],
       };
 
+      // CRITICAL: Ensure the input isn't disabled before initialization
+      if (inputRef.current.disabled) {
+        inputRef.current.disabled = false;
+      }
+
       autocompleteRef.current = new window.google.maps.places.Autocomplete(
         inputRef.current,
         options
       );
 
-      // Make sure we don't disable the input field
-      inputRef.current.disabled = false;
+      // Make sure we don't disable the input field after initialization
+      setTimeout(() => {
+        if (inputRef.current && inputRef.current.disabled) {
+          inputRef.current.disabled = false;
+        }
+      }, 100);
 
       autocompleteRef.current.addListener('place_changed', () => {
         const place = autocompleteRef.current?.getPlace();
         if (place && onPlaceSelect) {
           console.log('Place selected:', place.formatted_address);
           onPlaceSelect(place);
+          
+          // Ensure input remains enabled after place selection
+          if (inputRef.current) {
+            inputRef.current.disabled = false;
+          }
         }
       });
       
@@ -176,8 +197,27 @@ const useGooglePlacesAutocomplete = ({
       
       // Allow retry on error
       initializationAttemptedRef.current = false;
+      
+      // Ensure input remains enabled even if initialization fails
+      if (inputRef.current) {
+        inputRef.current.disabled = false;
+      }
     }
   };
+
+  // Ensure input field is never left disabled
+  useEffect(() => {
+    const enableInputInterval = setInterval(() => {
+      if (inputRef.current && inputRef.current.disabled) {
+        console.log('Enabling disabled input field');
+        inputRef.current.disabled = false;
+      }
+    }, 500);
+    
+    return () => {
+      clearInterval(enableInputInterval);
+    };
+  }, [inputRef]);
 
   return { loaded, error };
 };

@@ -36,12 +36,16 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         console.log('Attempting to fetch Google Maps API key');
         const key = await getGoogleMapsApiKey();
         
-        // Check if key is valid
-        if (!key || key.trim() === '') {
+        // Validate the key
+        if (!key) {
+          throw new Error('No API key received');
+        }
+        
+        if (key.trim() === '') {
           throw new Error('Empty API key received');
         }
         
-        console.log('API key fetched successfully (redacted for security)');
+        console.log('API key fetched successfully');
         setApiKey(key);
         setApiKeyError(null);
         // Reset retry count on success
@@ -56,9 +60,9 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         // Only show toast on first error to avoid spamming
         if (retryCount === 0) {
           toast({
-            title: 'Google Maps API Error',
-            description: 'Failed to load location autocomplete. Please try again later.',
-            variant: 'destructive',
+            title: 'Location Service Error',
+            description: 'Failed to load location autocomplete. You can still enter a location manually.',
+            variant: 'default',
           });
         }
         
@@ -104,17 +108,24 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
       toast({
         title: 'Error',
         description: autocompleteError,
-        variant: 'destructive',
+        variant: 'default',
       });
     }
   }, [autocompleteError, apiKeyError, toast]);
 
-  // Prevent the input from being disabled if we have a valid API key
+  // Ensure the input field is never disabled
   useEffect(() => {
-    if (inputRef.current && apiKey && !error && !loading) {
-      inputRef.current.disabled = false;
-    }
-  }, [apiKey, error, loading]);
+    const enableInputInterval = setInterval(() => {
+      if (inputRef.current && inputRef.current.disabled) {
+        console.log('Force enabling input field');
+        inputRef.current.disabled = false;
+      }
+    }, 300);
+    
+    return () => {
+      clearInterval(enableInputInterval);
+    };
+  }, []);
 
   // Custom input onChange handler to ensure the input stays enabled
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,7 +152,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           required
           className={`focus:border-primary focus:ring-primary ${error ? 'border-red-500' : ''}`}
           ref={inputRef}
-          disabled={loading || !!error}
+          disabled={false} // Never disable the input
         />
         {loading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -152,7 +163,10 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
       {error && (
         <Alert variant="destructive" className="mt-2">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>
+            {error}
+            <p className="text-xs mt-1">You can still enter a location manually.</p>
+          </AlertDescription>
         </Alert>
       )}
       {loaded && !error && (
