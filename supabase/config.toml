@@ -1,1 +1,33 @@
+
 project_id = "aopxnvleoxmldzjzyxwq"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+
+[db]
+port = 54322
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+
+[auth]
+enabled = true
+
+[analytics]
+enabled = false
+
+[functions.generate-trip]
+verify_jwt = true

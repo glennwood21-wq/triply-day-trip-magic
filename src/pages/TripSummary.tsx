@@ -29,18 +29,25 @@ const TripSummary = () => {
     setLoading(true);
     
     try {
+      // Check if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to generate your trip.",
+          variant: "destructive",
+        });
+        navigate('/auth');
+        return;
+      }
+      
       // Generate the prompt
       const prompt = generatePrompt(tripSettings);
       
-      // For now, we'll just show the prompt as a success message
-      toast({
-        title: "Trip Generation Ready",
-        description: "Your trip details have been processed and are ready for generation.",
-      });
-      
-      // Store the prompt in the trip description
+      // Save the prompt in the trip description first
       if (tripId) {
-        const { error } = await supabase
+        const { error: saveError } = await supabase
           .from('trips')
           .update({
             description: JSON.stringify({
@@ -50,10 +57,42 @@ const TripSummary = () => {
           })
           .eq('id', tripId);
           
-        if (error) throw error;
+        if (saveError) throw saveError;
       }
       
-      // Navigate to dashboard for now
+      // Call our secure edge function to generate the trip using OpenAI
+      const { data, error } = await supabase.functions.invoke('generate-trip', {
+        body: { prompt },
+      });
+      
+      if (error) throw error;
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate trip');
+      }
+      
+      // Store the generated itinerary in the database
+      if (tripId) {
+        const { error: updateError } = await supabase
+          .from('trips')
+          .update({
+            description: JSON.stringify({
+              ...tripSettings,
+              generatedPrompt: prompt,
+              generatedItinerary: data.itinerary
+            })
+          })
+          .eq('id', tripId);
+          
+        if (updateError) throw updateError;
+      }
+      
+      toast({
+        title: "Trip Generated Successfully",
+        description: "Your custom trip itinerary has been created!",
+      });
+      
+      // Navigate to dashboard
       navigate('/dashboard');
     } catch (error: any) {
       toast({
@@ -61,6 +100,7 @@ const TripSummary = () => {
         description: error.message || "Failed to generate trip.",
         variant: "destructive",
       });
+      console.error("Trip generation error:", error);
     } finally {
       setLoading(false);
     }
