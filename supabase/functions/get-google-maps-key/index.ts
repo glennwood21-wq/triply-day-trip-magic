@@ -50,7 +50,7 @@ serve(async (req) => {
     const searchPath = url.pathname.split('/').pop();
     
     if (searchPath === 'autocomplete') {
-      // Fix: Get query from URL search params instead of body
+      // Get query from URL search params
       const query = url.searchParams.get('query');
       if (!query) {
         return new Response(
@@ -68,9 +68,9 @@ serve(async (req) => {
       console.log(`Fetching place autocomplete results for: ${query}`);
       
       try {
-        // Call the Places API (NEW)
+        // Call the Places API (NEW) with the correct parameter name
         const placesResponse = await fetch(
-          `https://places.googleapis.com/v1/places:autocomplete`,
+          `https://places.googleapis.com/v1/places:searchText`,
           {
             method: 'POST',
             headers: {
