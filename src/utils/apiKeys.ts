@@ -54,3 +54,24 @@ export const searchPlaces = async (query: string) => {
     throw error;
   }
 };
+
+// Add a function to refresh the OpenAI API key status
+export const checkOpenAIApiKey = async (): Promise<boolean> => {
+  console.log('Checking OpenAI API key status...');
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('generate-trip/check-api-key', {
+      method: 'GET',
+    });
+    
+    if (error) {
+      console.error('Error checking API key status:', error);
+      return false;
+    }
+    
+    return data?.valid === true;
+  } catch (error) {
+    console.error('Failed to check OpenAI API key status:', error);
+    return false;
+  }
+};
