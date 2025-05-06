@@ -304,6 +304,16 @@ IMPORTANT GUIDELINES:
     return value ? 'Yes' : 'No';
   };
 
+  // Helper function to get destination information based on trip settings
+  const getDestinationInfo = () => {
+    if (tripSettings.pointSpecificationType === 'specification' && tripSettings.pointSpecification) {
+      return tripSettings.pointSpecification;
+    } else if (tripSettings.pointSpecificationType === 'distance' && tripSettings.distanceValue) {
+      return `${tripSettings.distanceValue} miles from start`;
+    }
+    return 'Not specified';
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <DashboardNavbar />
@@ -350,21 +360,12 @@ IMPORTANT GUIDELINES:
                       </div>
                       
                       {/* Destination Information */}
-                      {tripSettings.pointSpecificationType === 'specification' && (
-                        <div>
-                          <p className="text-sm text-gray-500">
-                            {tripSettings.returnToStart ? 'Furthest Point' : 'End Point'}
-                          </p>
-                          <p className="font-medium">{tripSettings.pointSpecification || 'Not specified'}</p>
-                        </div>
-                      )}
-                      
-                      {tripSettings.pointSpecificationType === 'distance' && (
-                        <div>
-                          <p className="text-sm text-gray-500">Maximum Distance</p>
-                          <p className="font-medium">{tripSettings.distanceValue} miles</p>
-                        </div>
-                      )}
+                      <div>
+                        <p className="text-sm text-gray-500">
+                          {tripSettings.returnToStart ? 'Furthest Point' : 'End Point'}
+                        </p>
+                        <p className="font-medium">{getDestinationInfo()}</p>
+                      </div>
                     </div>
                   </div>
                   

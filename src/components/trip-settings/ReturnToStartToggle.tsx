@@ -64,7 +64,7 @@ const ReturnToStartToggle = ({
               className="flex flex-col space-y-2"
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="furthest-point" id="furthest-point" />
+                <RadioGroupItem value="specification" id="furthest-point" />
                 <Label htmlFor="furthest-point">Enter furthest point location</Label>
               </div>
               <div className="flex items-center space-x-2">
@@ -75,7 +75,7 @@ const ReturnToStartToggle = ({
           </div>
           
           {/* Conditional rendering based on the selected option */}
-          {pointSpecificationType === 'furthest-point' && (
+          {pointSpecificationType === 'specification' && (
             <div className="space-y-2 pl-4">
               <StartLocationInput
                 label="Furthest Point"
