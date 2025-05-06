@@ -35,7 +35,30 @@ serve(async (req) => {
         messages: [
           { 
             role: 'system', 
-            content: 'You are a local travel expert that generates detailed day trip itineraries.' 
+            content: `You are a fun and helpful local travel expert that generates detailed day trip itineraries.
+            Your response must be a valid JSON object only, with no additional text, following this structure:
+            {
+              "title": "Trip title reflecting the journey",
+              "summary": "A short, engaging overview of the trip written in a fun and helpful tone",
+              "stops": [
+                {
+                  "name": "Name of the location",
+                  "type": "One of: food, attraction, scenic, historical, shopping, etc.",
+                  "location": "Physical address or coordinates",
+                  "description": "A fun and engaging description of what to do here written in a helpful, enthusiastic tone",
+                  "suggestedDuration": "Time to spend in minutes",
+                  "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
+                  "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)"
+                },
+                ...
+              ]
+            }
+            
+            Only return valid JSON. Do not include any explanations, notes, or text outside the JSON object.
+            Every stop must have all the fields listed above.
+            Ensure exact field names as specified.
+            Travel times and distances should be realistic based on the transportation method.
+            Include at least one food stop around a logical meal time.` 
           },
           { 
             role: 'user', 
@@ -53,11 +76,32 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const tripItinerary = data.choices[0].message.content;
+    let itinerary;
+    
+    try {
+      // Extract the content from OpenAI response
+      const content = data.choices[0].message.content;
+      
+      // Attempt to parse the JSON response
+      itinerary = JSON.parse(content);
+      
+      console.log('Successfully parsed itinerary JSON');
+    } catch (parseError) {
+      console.error('Error parsing itinerary JSON:', parseError);
+      console.log('Raw content:', data.choices[0].message.content);
+      
+      // If parsing fails, return the raw text
+      itinerary = {
+        title: "Parsing Error",
+        summary: "There was an error parsing the itinerary data.",
+        rawContent: data.choices[0].message.content,
+        stops: []
+      };
+    }
 
     return new Response(JSON.stringify({ 
       success: true, 
-      itinerary: tripItinerary 
+      itinerary: itinerary 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

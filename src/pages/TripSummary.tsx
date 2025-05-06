@@ -10,10 +10,28 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Rocket } from 'lucide-react';
 import useTripSettings from '@/hooks/useTripSettings';
 
+interface TripItinerary {
+  title: string;
+  summary: string;
+  stops: TripStop[];
+  rawContent?: string; // For error cases
+}
+
+interface TripStop {
+  name: string;
+  type: string;
+  location: string;
+  description: string;
+  suggestedDuration: string;
+  distanceFromPrevious: string;
+  travelTimeFromPrevious: string;
+}
+
 const TripSummary = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [generatingTrip, setGeneratingTrip] = useState(false);
   
   // Get trip settings from the custom hook
   const {
@@ -27,6 +45,7 @@ const TripSummary = () => {
   
   const generateTrip = async () => {
     setLoading(true);
+    setGeneratingTrip(true);
     
     try {
       // Check if user is authenticated
@@ -103,6 +122,7 @@ const TripSummary = () => {
       console.error("Trip generation error:", error);
     } finally {
       setLoading(false);
+      setGeneratingTrip(false);
     }
   };
   
@@ -316,6 +336,7 @@ IMPORTANT GUIDELINES:
                     variant="outline"
                     onClick={goBack}
                     className="flex items-center gap-2"
+                    disabled={generatingTrip}
                   >
                     <ArrowLeft size={16} />
                     Back to Preferences
@@ -326,7 +347,7 @@ IMPORTANT GUIDELINES:
                     className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
                     disabled={loading}
                   >
-                    {loading ? 'Generating...' : 'Generate My Trip'} 
+                    {generatingTrip ? 'Generating...' : 'Generate My Trip'} 
                     <Rocket size={16} />
                   </Button>
                 </div>
