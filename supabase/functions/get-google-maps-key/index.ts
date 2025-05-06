@@ -35,7 +35,7 @@ serve(async (req) => {
       console.error("Invalid Google Maps API key format");
       return new Response(
         JSON.stringify({ 
-          error: "Invalid Google Maps API key format",
+          error: "Invalid Google Maps API key format. Should start with 'AIza'",
           status: "error"
         }),
         {
