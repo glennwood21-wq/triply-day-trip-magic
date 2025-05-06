@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -104,8 +105,8 @@ const TripAdditionalPreferences = () => {
           description: "Your trip's additional preferences have been saved successfully.",
         });
         
-        // Navigate to dashboard
-        navigate('/dashboard');
+        // Navigate to summary page instead of dashboard
+        navigate('/trip-summary' + (tripId ? `?tripId=${tripId}` : ''));
       } else {
         toast({
           title: "Complete previous settings first",

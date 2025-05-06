@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import TripSettings from "./pages/TripSettings";
 import TripPreferencesSettings from "./pages/TripPreferencesSettings";
 import TripAdditionalPreferences from "./pages/TripAdditionalPreferences";
+import TripSummary from "./pages/TripSummary";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/trip-preferences" element={<TripPreferences />} />
           <Route path="/trip-preferences-settings" element={<TripPreferencesSettings />} />
           <Route path="/trip-additional-preferences" element={<TripAdditionalPreferences />} />
+          <Route path="/trip-summary" element={<TripSummary />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
