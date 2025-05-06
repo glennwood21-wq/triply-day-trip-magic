@@ -109,6 +109,22 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
     }
   }, [autocompleteError, apiKeyError, toast]);
 
+  // Prevent the input from being disabled if we have a valid API key
+  useEffect(() => {
+    if (inputRef.current && apiKey && !error && !loading) {
+      inputRef.current.disabled = false;
+    }
+  }, [apiKey, error, loading]);
+
+  // Custom input onChange handler to ensure the input stays enabled
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e);
+    // Make sure the input is not disabled after the change
+    if (inputRef.current) {
+      inputRef.current.disabled = false;
+    }
+  };
+
   return (
     <div className="space-y-2">
       <Label htmlFor="startLocation" className="flex items-center gap-2">
@@ -121,7 +137,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           name="startLocation"
           placeholder={isInitialLoad ? "Loading location search..." : "Enter your starting point (city, landmark, address)"}
           value={value}
-          onChange={onChange}
+          onChange={handleInputChange}
           required
           className={`focus:border-primary focus:ring-primary ${error ? 'border-red-500' : ''}`}
           ref={inputRef}

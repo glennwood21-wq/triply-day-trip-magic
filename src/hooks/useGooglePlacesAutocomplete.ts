@@ -44,12 +44,13 @@ const useGooglePlacesAutocomplete = ({
     };
   }, [apiKey]);
 
-  // Load Google Maps API script
+  // Load Google Maps API script with proper API key validation
   useEffect(() => {
     // If no API key is provided, set an error and return early
     if (!apiKey || apiKey.trim() === '') {
       console.error('Google Maps API key is missing or empty');
       setError('Google Maps API key is missing. Please check your configuration.');
+      setLoaded(false);
       return;
     }
 
@@ -100,6 +101,7 @@ const useGooglePlacesAutocomplete = ({
       console.error('Failed to load Google Maps API script:', e);
       setError('Failed to load Google Maps API. Please check your API key or internet connection.');
       scriptLoadAttemptedRef.current = false; // Allow retry on error
+      setLoaded(false);
     };
 
     document.head.appendChild(script);
@@ -110,6 +112,7 @@ const useGooglePlacesAutocomplete = ({
         console.error('Google Maps API script loading timed out');
         setError('Google Maps API loading timed out. Please check your API key or internet connection.');
         scriptLoadAttemptedRef.current = false; // Allow retry after timeout
+        setLoaded(false);
       }
     }, 10000); // 10 second timeout
 
@@ -154,6 +157,9 @@ const useGooglePlacesAutocomplete = ({
         options
       );
 
+      // Make sure we don't disable the input field
+      inputRef.current.disabled = false;
+
       autocompleteRef.current.addListener('place_changed', () => {
         const place = autocompleteRef.current?.getPlace();
         if (place && onPlaceSelect) {
@@ -166,6 +172,7 @@ const useGooglePlacesAutocomplete = ({
     } catch (err) {
       console.error('Error initializing Google Places Autocomplete:', err);
       setError('Error initializing Google Places Autocomplete');
+      setLoaded(false);
       
       // Allow retry on error
       initializationAttemptedRef.current = false;

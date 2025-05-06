@@ -16,8 +16,8 @@ serve(async (req) => {
     // Get the API key from environment variables
     const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
     
-    if (!apiKey) {
-      console.error("CRITICAL ERROR: Google Maps API key not found in environment variables");
+    if (!apiKey || apiKey.trim() === "") {
+      console.error("CRITICAL ERROR: Google Maps API key not found or empty in environment variables");
       return new Response(
         JSON.stringify({ 
           error: "Google Maps API key not configured",

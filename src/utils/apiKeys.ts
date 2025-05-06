@@ -28,9 +28,9 @@ export const getGoogleMapsApiKey = async (): Promise<string> => {
           throw new Error('No data returned from Edge Function');
         }
         
-        if (!data.apiKey) {
-          console.error(`No API key in response (attempt ${retryCount + 1}):`, data);
-          throw new Error('No API key found in response. Please check your Supabase Edge Function configuration.');
+        if (!data.apiKey || data.apiKey.trim() === '') {
+          console.error(`Empty API key in response (attempt ${retryCount + 1}):`, data);
+          throw new Error('Empty API key received from Edge Function. Please check your Supabase Edge Function secrets configuration.');
         }
         
         console.log('API key fetched successfully (redacted for security)');
