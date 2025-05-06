@@ -34,6 +34,7 @@ const TripSummary = () => {
   const [generatingTrip, setGeneratingTrip] = useState(false);
   const [savingTrip, setSavingTrip] = useState(false);
   const [itinerary, setItinerary] = useState<TripItinerary | null>(null);
+  const [databaseLocation, setDatabaseLocation] = useState<string | null>(null);
   
   // Get trip settings from the custom hook
   const {
@@ -44,12 +45,14 @@ const TripSummary = () => {
   // Debug the starting location
   useEffect(() => {
     console.log("Current trip settings:", tripSettings);
-    console.log("Starting location:", tripSettings.startLocation);
-  }, [tripSettings]);
+    console.log("Starting location from settings:", tripSettings.startLocation);
+    console.log("Database location:", databaseLocation);
+  }, [tripSettings, databaseLocation]);
   
   // On initial load, check if we already have a generated itinerary
+  // and fetch the location directly from the database as well
   useEffect(() => {
-    const checkExistingItinerary = async () => {
+    const fetchTripData = async () => {
       if (tripId) {
         try {
           const { data, error } = await supabase
@@ -60,7 +63,13 @@ const TripSummary = () => {
             
           if (error) throw error;
           
-          console.log("Trip data from database:", data);
+          console.log("Trip data directly from database:", data);
+          
+          // Store the location from the database
+          if (data?.location) {
+            console.log("Setting database location:", data.location);
+            setDatabaseLocation(data.location);
+          }
           
           if (data?.description) {
             // Try to parse the description for generated itinerary
@@ -79,7 +88,7 @@ const TripSummary = () => {
       }
     };
     
-    checkExistingItinerary();
+    fetchTripData();
   }, [tripId]);
   
   const goBack = () => {
@@ -326,6 +335,22 @@ IMPORTANT GUIDELINES:
     return 'Not specified';
   };
 
+  // Helper function to determine the starting location display value
+  const getStartingLocation = () => {
+    // First priority: directly fetched location from database (most reliable)
+    if (databaseLocation) {
+      return databaseLocation;
+    }
+    
+    // Second priority: location from trip settings
+    if (tripSettings.startLocation) {
+      return tripSettings.startLocation;
+    }
+    
+    // Fallback
+    return 'Not set yet';
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <DashboardNavbar />
@@ -356,7 +381,7 @@ IMPORTANT GUIDELINES:
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">Starting Location</p>
-                        <p className="font-medium">{tripSettings.startLocation ? tripSettings.startLocation : 'Not set yet'}</p>
+                        <p className="font-medium">{getStartingLocation()}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Trip Duration</p>

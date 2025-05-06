@@ -84,6 +84,9 @@ const useTripSettings = () => {
             const tripData = data as TripData;
             console.log("Trip data fetched:", tripData);
             
+            // Log the location directly from the database for debugging
+            console.log("Location from database:", tripData.location);
+            
             // Try to parse settings from the description field if available
             let parsedSettings: Partial<TripSettings> = {};
             
@@ -97,13 +100,27 @@ const useTripSettings = () => {
               }
             }
             
+            // CRITICAL FIX: Ensure we use the location from the database first
+            // This is what the user entered on the first page
+            if (tripData.location) {
+              console.log("Using location from database:", tripData.location);
+            }
+            
             // Update the trip settings with data from the database
-            // Prioritize the location from the database if available
-            setTripSettings(prev => ({
-              ...prev,
-              ...parsedSettings,
-              startLocation: tripData.location || parsedSettings.startLocation || ''
-            }));
+            // Prioritize the location from the database as it's the original user input
+            setTripSettings(prev => {
+              const newSettings = {
+                ...prev,
+                ...parsedSettings,
+              };
+              
+              // Explicitly prioritize location from the database (first user input)
+              if (tripData.location) {
+                newSettings.startLocation = tripData.location;
+              }
+              
+              return newSettings;
+            });
           }
         } catch (error) {
           console.error("Error fetching trip data:", error);
