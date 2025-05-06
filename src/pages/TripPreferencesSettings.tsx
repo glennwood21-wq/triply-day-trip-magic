@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,9 +50,9 @@ const TripPreferencesSettings = () => {
     { id: 'local', label: 'Local Cuisine' },
     { id: 'bakery', label: 'Bakery' },
     { id: 'cafe', label: 'Café' },
-    { id: 'restaurant', label: 'Restaurant' },
     { id: 'pub', label: 'Pub/Bar' },
-    { id: 'fastfood', label: 'Fast Food' }
+    { id: 'fastfood', label: 'Fast Food' },
+    { id: 'restaurant', label: 'Restaurant' }
   ];
   
   const handleStopTypeChange = (checked: boolean, id: string) => {
@@ -146,8 +145,8 @@ const TripPreferencesSettings = () => {
         description: "Your trip preferences have been saved successfully.",
       });
       
-      // Navigate to dashboard
-      navigate('/dashboard');
+      // Navigate to the additional preferences page instead of dashboard
+      navigate('/trip-additional-preferences' + (tripId ? `?tripId=${tripId}` : ''));
       
     } catch (error: any) {
       toast({

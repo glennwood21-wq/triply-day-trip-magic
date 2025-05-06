@@ -14,6 +14,13 @@ interface TripSettings {
   maxStops?: number;
   foodStops?: number;
   foodPreferences?: string[];
+  // New additional preference fields
+  travelingWithKids?: boolean;
+  travelingWithPets?: boolean;
+  accessibilityNeeds?: string[];
+  preferenceType?: 'hidden-gems' | 'top-rated' | 'mix';
+  budgetLevel?: 'low' | 'medium' | 'high';
+  weatherSensitive?: boolean;
 }
 
 // This interface is for what we get back from the database
@@ -41,7 +48,13 @@ const useTripSettings = () => {
     stopTypes: [],
     maxStops: 5,
     foodStops: 2,
-    foodPreferences: []
+    foodPreferences: [],
+    travelingWithKids: false,
+    travelingWithPets: false,
+    accessibilityNeeds: [],
+    preferenceType: 'mix',
+    budgetLevel: 'medium',
+    weatherSensitive: false
   });
 
   useEffect(() => {
