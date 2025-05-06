@@ -154,7 +154,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           </div>
         )}
         
-        {/* Suggestions dropdown */}
+        {/* Suggestions dropdown with improved display */}
         {isFocused && suggestions.length > 0 && (
           <div 
             ref={suggestionsRef}
@@ -163,7 +163,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
             {suggestions.map((place) => (
               <div
                 key={place.id}
-                className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                className="px-4 py-2 hover:bg-gray-100 cursor-pointer transition-colors"
                 onClick={() => handleSelectPlace(place)}
               >
                 <div className="font-medium">{place.displayName.text}</div>

@@ -68,7 +68,7 @@ serve(async (req) => {
       console.log(`Fetching place autocomplete results for: ${query}`);
       
       try {
-        // Call the Places API (NEW) with the correct parameter name
+        // Call the Places API (NEW) with improved parameters for better matches
         const placesResponse = await fetch(
           `https://places.googleapis.com/v1/places:searchText`,
           {
@@ -80,7 +80,18 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               textQuery: query,
-              languageCode: "en"
+              languageCode: "en",
+              maxResultCount: 5, // Request multiple results
+              locationBias: {
+                circle: {
+                  center: {
+                    // Use default center that can be overridden by user's location
+                    latitude: 0,
+                    longitude: 0
+                  },
+                  radius: 20000000.0 // Large radius to avoid excessive bias
+                }
+              }
             })
           }
         );
