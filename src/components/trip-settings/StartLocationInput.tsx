@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MapPin, AlertCircle, Loader2 } from 'lucide-react';
@@ -7,6 +7,7 @@ import useGooglePlacesAutocomplete from '@/hooks/useGooglePlacesAutocomplete';
 import { getGoogleMapsApiKey } from '@/utils/apiKeys';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 
 interface StartLocationInputProps {
   value: string;
@@ -24,66 +25,64 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const maxRetries = 3;
 
+  const fetchApiKey = useCallback(async () => {
+    if (retryCount >= maxRetries) {
+      console.log(`Max retries (${maxRetries}) reached. Stopping API key fetch attempts.`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('Attempting to fetch Google Maps API key');
+      const key = await getGoogleMapsApiKey();
+      
+      // Validate the key
+      if (!key) {
+        throw new Error('No API key received');
+      }
+      
+      if (key.trim() === '') {
+        throw new Error('Empty API key received');
+      }
+      
+      console.log('API key fetched successfully');
+      setApiKey(key);
+      setApiKeyError(null);
+      // Reset retry count on success
+      setRetryCount(0);
+      setIsInitialLoad(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Failed to fetch Google Maps API key:', errorMessage);
+      setApiKeyError('Failed to load location services. Please try again later.');
+      setIsInitialLoad(false);
+      
+      // Only show toast on first error to avoid spamming
+      if (retryCount === 0) {
+        toast({
+          title: 'Location Service Error',
+          description: 'Failed to load location autocomplete. You can still enter a location manually.',
+          variant: 'default',
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [retryCount, maxRetries, toast]);
+
+  // Retry mechanism with manual trigger
+  const handleRetry = () => {
+    setRetryCount(0);
+    setApiKeyError(null);
+    fetchApiKey();
+  };
+
   useEffect(() => {
-    const fetchApiKey = async () => {
-      if (retryCount >= maxRetries) {
-        console.log(`Max retries (${maxRetries}) reached. Stopping API key fetch attempts.`);
-        return;
-      }
-
-      setLoading(true);
-      try {
-        console.log('Attempting to fetch Google Maps API key');
-        const key = await getGoogleMapsApiKey();
-        
-        // Validate the key
-        if (!key) {
-          throw new Error('No API key received');
-        }
-        
-        if (key.trim() === '') {
-          throw new Error('Empty API key received');
-        }
-        
-        console.log('API key fetched successfully');
-        setApiKey(key);
-        setApiKeyError(null);
-        // Reset retry count on success
-        setRetryCount(0);
-        setIsInitialLoad(false);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('Failed to fetch Google Maps API key:', errorMessage);
-        setApiKeyError('Failed to load location services. Please try again later.');
-        setIsInitialLoad(false);
-        
-        // Only show toast on first error to avoid spamming
-        if (retryCount === 0) {
-          toast({
-            title: 'Location Service Error',
-            description: 'Failed to load location autocomplete. You can still enter a location manually.',
-            variant: 'default',
-          });
-        }
-        
-        // Auto-retry with exponential backoff
-        if (retryCount < maxRetries) {
-          const timeout = setTimeout(() => {
-            setRetryCount(prev => prev + 1);
-          }, 1000 * Math.pow(2, retryCount));
-          
-          return () => clearTimeout(timeout);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
     // Only fetch API key if we don't have one or if we are retrying
     if (!apiKey || retryCount > 0) {
       fetchApiKey();
     }
-  }, [toast, retryCount, maxRetries]);
+  }, [apiKey, retryCount, fetchApiKey]);
 
   const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
     if (place.formatted_address && onLocationSelect) {
@@ -115,17 +114,10 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
 
   // Ensure the input field is never disabled
   useEffect(() => {
-    const enableInputInterval = setInterval(() => {
-      if (inputRef.current && inputRef.current.disabled) {
-        console.log('Force enabling input field');
-        inputRef.current.disabled = false;
-      }
-    }, 300);
-    
-    return () => {
-      clearInterval(enableInputInterval);
-    };
-  }, []);
+    if (inputRef.current) {
+      inputRef.current.disabled = false;
+    }
+  }, [value]);
 
   // Custom input onChange handler to ensure the input stays enabled
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,6 +158,16 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           <AlertDescription>
             {error}
             <p className="text-xs mt-1">You can still enter a location manually.</p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="mt-2" 
+              onClick={handleRetry}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+              Retry Loading Location Search
+            </Button>
           </AlertDescription>
         </Alert>
       )}

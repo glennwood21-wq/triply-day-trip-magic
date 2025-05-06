@@ -33,14 +33,10 @@ export const getGoogleMapsApiKey = async (): Promise<string> => {
           throw new Error('API key missing in response from Edge Function');
         }
         
-        if (data.apiKey.trim() === '') {
-          console.error(`Empty API key in response (attempt ${retryCount + 1})`);
-          throw new Error('Empty API key received from Edge Function');
-        }
-        
-        console.log('API key fetched successfully');
+        console.log('API key fetched successfully:', !!data.apiKey);
         return data.apiKey;
       } catch (err) {
+        console.error(`API key fetch error (attempt ${retryCount + 1}):`, err);
         lastError = err;
         retryCount++;
         

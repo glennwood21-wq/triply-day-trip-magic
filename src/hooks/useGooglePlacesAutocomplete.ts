@@ -18,20 +18,19 @@ const useGooglePlacesAutocomplete = ({
   const scriptLoadAttemptedRef = useRef(false);
   const loadCallbackTimeoutRef = useRef<number | null>(null);
   const initializationAttemptedRef = useRef(false);
+  const lastApiKeyRef = useRef<string>('');
 
   // Clear any existing autocomplete when API key changes or component unmounts
   useEffect(() => {
     // Reset initialization state when API key changes
-    if (autocompleteRef.current) {
+    if (apiKey !== lastApiKeyRef.current) {
       console.log('API key changed, clearing existing autocomplete');
+      lastApiKeyRef.current = apiKey;
       autocompleteRef.current = null;
-    }
-    
-    initializationAttemptedRef.current = false;
-    scriptLoadAttemptedRef.current = false;
-    
-    // Reset the error state when API key changes
-    if (apiKey) {
+      initializationAttemptedRef.current = false;
+      scriptLoadAttemptedRef.current = false;
+      
+      // Reset the error state when API key changes
       setError(null);
       setLoaded(false);
     }
@@ -207,16 +206,9 @@ const useGooglePlacesAutocomplete = ({
 
   // Ensure input field is never left disabled
   useEffect(() => {
-    const enableInputInterval = setInterval(() => {
-      if (inputRef.current && inputRef.current.disabled) {
-        console.log('Enabling disabled input field');
-        inputRef.current.disabled = false;
-      }
-    }, 500);
-    
-    return () => {
-      clearInterval(enableInputInterval);
-    };
+    if (inputRef.current) {
+      inputRef.current.disabled = false;
+    }
   }, [inputRef]);
 
   return { loaded, error };
