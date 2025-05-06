@@ -15,10 +15,11 @@ export const getGoogleMapsApiKey = async (): Promise<string> => {
     }
     
     if (!data || !data.apiKey) {
-      console.error('No API key returned from Edge Function');
+      console.error('No API key returned from Edge Function:', data);
       throw new Error('No API key found. Please check your Supabase Edge Function configuration.');
     }
     
+    console.log('API key fetched successfully');
     return data.apiKey;
   } catch (error) {
     console.error('Error fetching Google Maps API Key:', error);

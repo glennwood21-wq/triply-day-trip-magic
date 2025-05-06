@@ -20,6 +20,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const [apiKey, setApiKey] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const fetchApiKey = async () => {
@@ -29,21 +30,39 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         console.log('API key fetched successfully (redacted for security)');
         setApiKey(key);
         setApiKeyError(null);
+        // Reset retry count on success
+        setRetryCount(0);
       } catch (error) {
         console.error('Failed to fetch Google Maps API key:', error);
         setApiKeyError('Failed to load location services. Please try again later.');
-        toast({
-          title: 'Error',
-          description: 'Failed to load location autocomplete. Please try again later.',
-          variant: 'destructive',
-        });
+        
+        // Only show toast on first error to avoid spamming
+        if (retryCount === 0) {
+          toast({
+            title: 'Google Maps API Error',
+            description: 'Failed to load location autocomplete. Please try again later.',
+            variant: 'destructive',
+          });
+        }
+        
+        // Auto-retry up to 3 times with exponential backoff
+        if (retryCount < 3) {
+          const timeout = setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+          }, 1000 * Math.pow(2, retryCount));
+          
+          return () => clearTimeout(timeout);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchApiKey();
-  }, [toast]);
+    // Only fetch API key if we don't have one or if we are retrying
+    if (!apiKey || retryCount > 0) {
+      fetchApiKey();
+    }
+  }, [toast, retryCount]);
 
   const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
     if (place.formatted_address && onLocationSelect) {

@@ -19,7 +19,10 @@ serve(async (req) => {
     if (!apiKey) {
       console.error("Google Maps API key not configured in environment variables");
       return new Response(
-        JSON.stringify({ error: "Google Maps API key not configured" }),
+        JSON.stringify({ 
+          error: "Google Maps API key not configured",
+          message: "Please configure the GOOGLE_MAPS_API_KEY in Supabase Edge Function Secrets"
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -27,6 +30,8 @@ serve(async (req) => {
       );
     }
 
+    console.log("Successfully retrieved Google Maps API key");
+    
     // Return the API key
     return new Response(
       JSON.stringify({ apiKey }),
@@ -38,7 +43,10 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error retrieving Google Maps API key:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        message: "Failed to retrieve Google Maps API key" 
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
