@@ -60,7 +60,9 @@ const useGooglePlacesAutocomplete = ({
       document.head.removeChild(existingScript);
     }
 
-    console.log('Loading Google Maps API with key:', apiKey.substring(0, 5) + '...');
+    // Sanitize API key for logging (only show first 5 characters)
+    const sanitizedKey = apiKey.substring(0, 5) + '...';
+    console.log('Loading Google Maps API with key:', sanitizedKey);
 
     // Load the Google Maps Places API script
     const script = document.createElement('script');

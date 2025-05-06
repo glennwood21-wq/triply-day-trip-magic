@@ -30,7 +30,9 @@ serve(async (req) => {
       );
     }
 
-    console.log("Successfully retrieved Google Maps API key");
+    // Debug: Log a sanitized version of the key (first 5 chars)
+    const sanitizedKey = apiKey.substring(0, 5) + "...";
+    console.log(`Successfully retrieved Google Maps API key: ${sanitizedKey}`);
     
     // Return the API key
     return new Response(
