@@ -24,6 +24,8 @@ interface TripSettings {
   preferenceType?: 'hidden-gems' | 'top-rated' | 'mix';
   budgetLevel?: 'low' | 'medium' | 'high';
   weatherSensitive?: boolean;
+  // Add location field to store the location separately in JSON
+  location?: string;
 }
 
 // This interface is for what we get back from the database
@@ -100,6 +102,7 @@ const useTripSettings = () => {
                 // Check if the location is stored in the description JSON
                 if (parsedSettings.location) {
                   locationFromDescription = parsedSettings.location;
+                  console.log("Location from description JSON:", locationFromDescription);
                 }
               } catch (e) {
                 console.error("Could not parse settings from description:", e);
