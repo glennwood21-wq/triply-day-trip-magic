@@ -21,6 +21,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
   const [loading, setLoading] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const maxRetries = 3;
 
   useEffect(() => {
@@ -38,9 +39,11 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         setApiKeyError(null);
         // Reset retry count on success
         setRetryCount(0);
+        setIsInitialLoad(false);
       } catch (error) {
         console.error('Failed to fetch Google Maps API key:', error);
         setApiKeyError('Failed to load location services. Please try again later.');
+        setIsInitialLoad(false);
         
         // Only show toast on first error to avoid spamming
         if (retryCount === 0) {
@@ -107,13 +110,13 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
         <Input
           id="startLocation"
           name="startLocation"
-          placeholder="Enter your starting point (city, landmark, address)"
+          placeholder={isInitialLoad ? "Loading location search..." : "Enter your starting point (city, landmark, address)"}
           value={value}
           onChange={onChange}
           required
-          className="focus:border-primary focus:ring-primary"
+          className={`focus:border-primary focus:ring-primary ${error ? 'border-red-500' : ''}`}
           ref={inputRef}
-          disabled={loading}
+          disabled={loading || !!error}
         />
         {loading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
