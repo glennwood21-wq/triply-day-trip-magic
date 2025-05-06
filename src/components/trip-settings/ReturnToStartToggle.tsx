@@ -52,21 +52,17 @@ const ReturnToStartToggle = ({
         />
       </div>
       
-      {!returnToStart && (
+      {returnToStart ? (
         <div className="space-y-6 pl-2 border-l-2 border-gray-200">
           <div className="space-y-4">
             <Label className="text-base font-medium">
-              Specify where your trip will end
+              Specify turnaround point
             </Label>
             <RadioGroup 
               value={pointSpecificationType} 
               onValueChange={onPointTypeChange}
               className="flex flex-col space-y-2"
             >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="end-point" id="end-point" />
-                <Label htmlFor="end-point">Enter end point location</Label>
-              </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="furthest-point" id="furthest-point" />
                 <Label htmlFor="furthest-point">Enter furthest point location</Label>
@@ -79,19 +75,10 @@ const ReturnToStartToggle = ({
           </div>
           
           {/* Conditional rendering based on the selected option */}
-          {pointSpecificationType === 'end-point' && (
-            <div className="space-y-2 pl-4">
-              <StartLocationInput
-                value={pointSpecification}
-                onChange={(e) => handleInputChange(e, 'pointSpecification')}
-                onLocationSelect={handleLocationSelect}
-              />
-            </div>
-          )}
-          
           {pointSpecificationType === 'furthest-point' && (
             <div className="space-y-2 pl-4">
               <StartLocationInput
+                label="Furthest Point"
                 value={pointSpecification}
                 onChange={(e) => handleInputChange(e, 'pointSpecification')}
                 onLocationSelect={handleLocationSelect}
@@ -119,6 +106,20 @@ const ReturnToStartToggle = ({
               </div>
             </div>
           )}
+        </div>
+      ) : (
+        <div className="space-y-6 pl-2 border-l-2 border-gray-200">
+          <div className="space-y-2">
+            <Label className="text-base font-medium">
+              Enter end point location
+            </Label>
+            <StartLocationInput
+              label="End Point"
+              value={pointSpecification}
+              onChange={(e) => handleInputChange(e, 'pointSpecification')}
+              onLocationSelect={handleLocationSelect}
+            />
+          </div>
         </div>
       )}
     </div>
