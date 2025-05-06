@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -344,7 +343,7 @@ IMPORTANT GUIDELINES:
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">Starting Location</p>
-                        <p className="font-medium">{tripSettings.startLocation || 'Not specified'}</p>
+                        <p className="font-medium">{tripSettings.startLocation || 'Not set yet'}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Trip Duration</p>
