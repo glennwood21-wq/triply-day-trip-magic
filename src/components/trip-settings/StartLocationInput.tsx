@@ -176,7 +176,7 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
           </div>
         </div>
         
-        {/* Suggestions dropdown with improved display */}
+        {/* Suggestions dropdown with improved display - removed third line showing location types */}
         {dropdownOpen && suggestions.length > 0 && (
           <div 
             ref={suggestionsRef}
@@ -190,11 +190,6 @@ const StartLocationInput = ({ value, onChange, onLocationSelect }: StartLocation
               >
                 <div className="font-medium">{place.displayName.text}</div>
                 <div className="text-sm text-gray-500">{place.formattedAddress}</div>
-                {place.types && place.types.length > 0 && (
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {place.types[0].replace(/_/g, ' ')}
-                  </div>
-                )}
               </div>
             ))}
           </div>
