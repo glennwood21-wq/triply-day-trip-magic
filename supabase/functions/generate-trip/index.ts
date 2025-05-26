@@ -52,16 +52,16 @@ serve(async (req) => {
         messages: [
           { 
             role: 'system', 
-            content: `You are a fun and helpful local travel expert that generates detailed day trip itineraries.
+            content: `You are a local travel expert that generates detailed day trip itineraries using ONLY real, verifiable locations.
             Your response must be a valid JSON object only, with no additional text, following this structure:
             {
               "title": "Trip title reflecting the journey",
               "summary": "A short, engaging overview of the trip written in a fun and helpful tone",
               "stops": [
                 {
-                  "name": "Name of the location",
-                  "type": "One of: food, attraction, scenic, historical, shopping, etc.",
-                  "location": "Physical address or coordinates",
+                  "name": "EXACT NAME of a real business/location (e.g., 'McDonald's Mentone', 'Healesville Sanctuary', 'Yering Station Winery')",
+                  "type": "One of: food, attraction, scenic, historical, shopping, winery",
+                  "location": "COMPLETE STREET ADDRESS with suburb, state, postcode (e.g., '15 Bell Street, Healesville VIC 3777, Australia')",
                   "description": "A fun and engaging description of what to do here written in a helpful, enthusiastic tone",
                   "suggestedDuration": "Time to spend in minutes",
                   "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
@@ -71,8 +71,20 @@ serve(async (req) => {
               ]
             }
             
+            CRITICAL REQUIREMENTS FOR REAL LOCATIONS:
+            1. ONLY use businesses and locations that actually exist and are currently operating
+            2. Use EXACT business names (e.g., "Rochford Wines" not "Yarra Valley Wine Tours")
+            3. Provide COMPLETE street addresses with specific street numbers, street names, suburbs, states, and postcodes
+            4. For restaurants/cafes: Use real establishment names like "Innocent Bystander Healesville", "Giant Steps Wine Bar", "Beechworth Bakery"
+            5. For attractions: Use official names like "Healesville Sanctuary", "Puffing Billy Railway", "Dandenong Ranges Botanic Garden"
+            6. For wineries: Use actual winery names like "Yering Station", "Rochford Wines", "Dominique Portet"
+            7. Verify opening hours and accessibility when selecting locations
+            8. Do NOT create generic location names or use vague addresses
+            9. Do NOT use placeholder locations or made-up business names
+            10. Each location must have a verifiable street address, not just suburb names
+            
             Only return valid JSON. Do not include any explanations, notes, or text outside the JSON object.
-            Every stop must have all the fields listed above.
+            Every stop must have all the fields listed above with REAL, VERIFIABLE information.
             Ensure exact field names as specified.
             Travel times and distances should be realistic based on the transportation method.
             Include at least one food stop around a logical meal time.` 
@@ -82,7 +94,7 @@ serve(async (req) => {
             content: prompt 
           }
         ],
-        temperature: 0.7,
+        temperature: 0.3, // Lower temperature for more consistent, factual responses
       }),
     });
 
@@ -119,6 +131,34 @@ serve(async (req) => {
       itinerary = JSON.parse(content);
       
       console.log('Successfully parsed itinerary JSON');
+      
+      // Validate that locations have proper addresses
+      if (itinerary && itinerary.stops && Array.isArray(itinerary.stops)) {
+        console.log('Validating location addresses...');
+        
+        for (let i = 0; i < itinerary.stops.length; i++) {
+          const stop = itinerary.stops[i];
+          
+          // Check if location has a specific street address
+          if (!stop.location || 
+              !stop.location.includes(',') || 
+              !stop.location.includes('Australia') ||
+              stop.location.split(',').length < 3) {
+            console.warn(`Stop ${i + 1} (${stop.name}) may have incomplete address: ${stop.location}`);
+          }
+          
+          // Check if name seems generic
+          if (stop.name && (
+              stop.name.toLowerCase().includes('tours') ||
+              stop.name.toLowerCase().includes('general') ||
+              stop.name.toLowerCase().includes('various') ||
+              stop.name.toLowerCase().includes('multiple')
+            )) {
+            console.warn(`Stop ${i + 1} may have generic name: ${stop.name}`);
+          }
+        }
+      }
+      
     } catch (parseError) {
       console.error('Error parsing itinerary JSON:', parseError);
       console.log('Raw content:', data.choices[0].message.content);
