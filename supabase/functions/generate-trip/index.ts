@@ -52,26 +52,37 @@ serve(async (req) => {
         messages: [
           { 
             role: 'system', 
-            content: `You are a local travel expert that generates detailed day trip itineraries using ONLY real, verifiable locations.
+            content: `You are a local travel expert that generates DIRECT, EFFICIENT day trip itineraries using ONLY real, verifiable locations.
+
+            CRITICAL ROUTE REQUIREMENTS - THIS IS EXTREMELY IMPORTANT:
+            1. The trip must follow a DIRECT, LOGICAL route from start to furthest point
+            2. NO ZIGZAGGING or inefficient routing - each stop must be progressively closer to the destination
+            3. ALL stops must be ON OR VERY CLOSE TO the direct route between start and furthest point
+            4. Think of it as a highway journey - you don't take major detours for minor attractions
+            5. Maximum deviation from the direct route should be 5-10 miles for any single stop
+            6. Each stop should be logically positioned between the previous stop and the destination
+            7. If returning to start, create an efficient loop - don't backtrack unnecessarily
+
             Your response must be a valid JSON object only, with no additional text, following this structure:
             {
-              "title": "Trip title reflecting the journey",
-              "summary": "A short, engaging overview of the trip written in a fun and helpful tone",
+              "title": "Trip title reflecting the direct journey route",
+              "summary": "A short overview emphasizing the efficient, direct route taken",
               "stops": [
                 {
                   "name": "EXACT NAME of a real business/location (e.g., 'McDonald's Mentone', 'Healesville Sanctuary', 'Yering Station Winery')",
                   "type": "One of: food, attraction, scenic, historical, shopping, winery",
                   "location": "COMPLETE STREET ADDRESS with suburb, state, postcode (e.g., '15 Bell Street, Healesville VIC 3777, Australia')",
-                  "description": "A fun and engaging description of what to do here written in a helpful, enthusiastic tone",
+                  "description": "A description of what to do here, mentioning its position along the direct route",
                   "suggestedDuration": "Time to spend in minutes",
                   "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
-                  "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)"
+                  "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)",
+                  "routeJustification": "Brief explanation of why this stop makes sense on the direct route"
                 },
                 ...
               ]
             }
             
-            CRITICAL REQUIREMENTS FOR REAL LOCATIONS:
+            CRITICAL REQUIREMENTS FOR REAL LOCATIONS ON DIRECT ROUTES:
             1. ONLY use businesses and locations that actually exist and are currently operating
             2. Use EXACT business names (e.g., "Rochford Wines" not "Yarra Valley Wine Tours")
             3. Provide COMPLETE street addresses with specific street numbers, street names, suburbs, states, and postcodes
@@ -82,19 +93,27 @@ serve(async (req) => {
             8. Do NOT create generic location names or use vague addresses
             9. Do NOT use placeholder locations or made-up business names
             10. Each location must have a verifiable street address, not just suburb names
-            
+            11. MOST IMPORTANTLY: Every stop must be positioned logically along the direct route - NO MAJOR DETOURS
+
+            ROUTE EFFICIENCY VALIDATION:
+            - Before suggesting any stop, mentally map the route from start → stop → destination
+            - Ensure each stop is a logical progression toward the furthest point
+            - Reject any location that requires significant backtracking or detours
+            - Prioritize attractions that are naturally positioned along the main route
+            - Consider the transportation method when determining route efficiency
+
             Only return valid JSON. Do not include any explanations, notes, or text outside the JSON object.
             Every stop must have all the fields listed above with REAL, VERIFIABLE information.
             Ensure exact field names as specified.
-            Travel times and distances should be realistic based on the transportation method.
-            Include at least one food stop around a logical meal time.` 
+            Travel times and distances should be realistic and reflect the direct routing.
+            Include at least one food stop around a logical meal time positioned along the route.` 
           },
           { 
             role: 'user', 
             content: prompt 
           }
         ],
-        temperature: 0.3, // Lower temperature for more consistent, factual responses
+        temperature: 0.2, // Even lower temperature for more consistent, logical routing
       }),
     });
 
@@ -132,9 +151,9 @@ serve(async (req) => {
       
       console.log('Successfully parsed itinerary JSON');
       
-      // Validate that locations have proper addresses
+      // Enhanced validation for direct routing
       if (itinerary && itinerary.stops && Array.isArray(itinerary.stops)) {
-        console.log('Validating location addresses...');
+        console.log('Validating route efficiency and location addresses...');
         
         for (let i = 0; i < itinerary.stops.length; i++) {
           const stop = itinerary.stops[i];
@@ -155,6 +174,28 @@ serve(async (req) => {
               stop.name.toLowerCase().includes('multiple')
             )) {
             console.warn(`Stop ${i + 1} may have generic name: ${stop.name}`);
+          }
+
+          // Validate route efficiency
+          if (i > 0) {
+            const prevDistance = parseFloat(itinerary.stops[i-1].distanceFromPrevious) || 0;
+            const currentDistance = parseFloat(stop.distanceFromPrevious) || 0;
+            
+            // Check for suspiciously long distances between consecutive stops
+            if (currentDistance > 50) {
+              console.warn(`Stop ${i + 1} (${stop.name}) is unusually far from previous stop: ${currentDistance} miles`);
+            }
+            
+            // Check travel time reasonableness
+            const travelTime = parseInt(stop.travelTimeFromPrevious) || 0;
+            if (travelTime > 120) {
+              console.warn(`Stop ${i + 1} (${stop.name}) has excessive travel time: ${travelTime} minutes`);
+            }
+          }
+          
+          // Check for route justification field
+          if (!stop.routeJustification) {
+            console.warn(`Stop ${i + 1} (${stop.name}) missing route justification`);
           }
         }
       }
