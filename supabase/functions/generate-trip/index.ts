@@ -70,6 +70,16 @@ serve(async (req) => {
             11. The journey to the furthest point should be direct and efficient with minimal or no intermediate stops
             12. Only place stops near the furthest point and on the return journey if applicable
 
+            LOCATION VERIFICATION PROTOCOL - MANDATORY FOR EVERY STOP:
+            13. Before including ANY location, mentally verify it as either 'REAL' or 'FAKE'
+            14. REAL locations have: specific business names, verifiable addresses, known operating status
+            15. FAKE locations include: generic descriptions, made-up names, vague addresses, non-existent businesses
+            16. If a location is identified as 'FAKE', immediately find a REAL alternative nearby that fits the same requirements
+            17. Use your knowledge of actual businesses, attractions, and landmarks in the area
+            18. Cross-reference with known establishments in the region
+            19. Prioritize well-established, recognizable businesses and attractions
+            20. When in doubt, choose the more famous/established option rather than obscure ones
+
             Your response must be a valid JSON object only, with no additional text, following this structure:
             {
               "title": "Trip title reflecting the direct journey route",
@@ -83,7 +93,8 @@ serve(async (req) => {
                   "suggestedDuration": "Time to spend in minutes",
                   "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
                   "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)",
-                  "routeJustification": "Brief explanation of why this stop makes sense on the direct route and adheres to the stop distribution rule"
+                  "routeJustification": "Brief explanation of why this stop makes sense on the direct route and adheres to the stop distribution rule",
+                  "verificationStatus": "REAL - confirmed as existing business/location with verifiable details"
                 },
                 ...
               ]
@@ -102,6 +113,7 @@ serve(async (req) => {
             10. Each location must have a verifiable street address, not just suburb names
             11. MOST IMPORTANTLY: Every stop must be positioned logically along the direct route - NO MAJOR DETOURS
             12. CRITICAL: Follow the stop distribution rule - no stops in first 70% of journey for location-based trips
+            13. VERIFY EACH LOCATION: Every stop must pass the REAL vs FAKE verification before inclusion
 
             ROUTE EFFICIENCY VALIDATION:
             - Before suggesting any stop, mentally map the route from start → stop → destination
@@ -110,19 +122,27 @@ serve(async (req) => {
             - Prioritize attractions that are naturally positioned along the main route
             - Consider the transportation method when determining route efficiency
             - For location-based trips, ensure stops are concentrated around the furthest point, not scattered along the journey
+            - Apply the REAL vs FAKE verification to every potential stop
+
+            VERIFICATION EXAMPLES:
+            REAL: "Healesville Sanctuary, Badger Creek Road, Healesville VIC 3777" - Known wildlife sanctuary with specific address
+            FAKE: "Local Wildlife Park, Main Street, Healesville" - Generic name, vague address
+            REAL: "Innocent Bystander, 336 Maroondah Highway, Healesville VIC 3777" - Actual winery/restaurant with specific address
+            FAKE: "Cozy Mountain Cafe, Town Centre, Healesville" - Generic name, no specific address
 
             Only return valid JSON. Do not include any explanations, notes, or text outside the JSON object.
             Every stop must have all the fields listed above with REAL, VERIFIABLE information.
             Ensure exact field names as specified.
             Travel times and distances should be realistic and reflect the direct routing.
-            Include at least one food stop around a logical meal time positioned along the route.` 
+            Include at least one food stop around a logical meal time positioned along the route.
+            Each stop MUST include the verificationStatus field confirming it as REAL.` 
           },
           { 
             role: 'user', 
             content: prompt 
           }
         ],
-        temperature: 0.2, // Even lower temperature for more consistent, logical routing
+        temperature: 0.1, // Even lower temperature for maximum factual accuracy
       }),
     });
 
