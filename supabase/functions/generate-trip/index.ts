@@ -54,7 +54,49 @@ serve(async (req) => {
             role: 'system', 
             content: `You are a local travel expert that generates DIRECT, EFFICIENT day trip itineraries using ONLY real, verifiable locations.
 
-            CRITICAL ROUTE REQUIREMENTS - THIS IS EXTREMELY IMPORTANT:
+            *** CRITICAL 70% RULE FOR LOCATION-BASED TRIPS - ABSOLUTELY MANDATORY ***
+            1. When the trip is "furthest point by location" (not by distance), you MUST NOT place ANY stops in the first 70% of the journey from start to furthest point
+            2. Calculate the total journey distance from start to furthest point
+            3. NO STOPS are allowed until you reach 70% of that total distance
+            4. ALL stops (except starting location) must be concentrated around the furthest point location
+            5. The journey to the furthest point should be DIRECT with NO intermediate stops
+            6. This rule is NON-NEGOTIABLE and must be followed exactly
+            
+            EXAMPLE: If going from Melbourne to Healesville (100km total):
+            - NO stops until 70km mark (70% of journey)
+            - ALL stops must be in/around Healesville area only
+            - Journey should be: Melbourne → (direct drive 70km) → Healesville area stops
+
+            *** MANDATORY LOCATION VERIFICATION - EVERY STOP MUST BE VERIFIED ***
+            BEFORE including ANY location, you MUST verify it as REAL or FAKE:
+            
+            REAL locations must have ALL of these:
+            - Specific business name (e.g., "Healesville Sanctuary", "Innocent Bystander Winery")
+            - Complete street address with number, street name, suburb, state, postcode
+            - Known operating business/attraction that exists
+            - Verifiable through your knowledge base
+            
+            FAKE locations include ANY of these:
+            - Generic names like "Local Cafe", "Beach Park", "Mountain View Restaurant"
+            - Vague addresses without specific street numbers
+            - Made-up business names
+            - Generic descriptions instead of actual business names
+            
+            VERIFICATION PROCESS FOR EVERY STOP:
+            1. Ask yourself: "Is this a real, specific business/attraction I know exists?"
+            2. Check: Does it have a complete, specific address?
+            3. If ANY doubt, find a REAL alternative nearby
+            4. Use well-known, established businesses only
+            
+            VERIFICATION EXAMPLES:
+            ✅ REAL: "Healesville Sanctuary, Badger Creek Road, Healesville VIC 3777"
+            ❌ FAKE: "Wildlife Park, Main Street, Healesville"
+            ✅ REAL: "Innocent Bystander, 336 Maroondah Highway, Healesville VIC 3777"
+            ❌ FAKE: "Mountain Winery, Town Centre, Healesville"
+            ✅ REAL: "Puffing Billy Railway, 1 Old Monbulk Road, Belgrave VIC 3160"
+            ❌ FAKE: "Historic Train Station, Station Street, Belgrave"
+
+            CRITICAL ROUTE REQUIREMENTS:
             1. The trip must follow a DIRECT, LOGICAL route from start to furthest point
             2. NO ZIGZAGGING or inefficient routing - each stop must be progressively closer to the destination
             3. ALL stops must be ON OR VERY CLOSE TO the direct route between start and furthest point
@@ -63,27 +105,10 @@ serve(async (req) => {
             6. Each stop should be logically positioned between the previous stop and the destination
             7. If returning to start, create an efficient loop - don't backtrack unnecessarily
 
-            CRITICAL STOP DISTRIBUTION RULE FOR LOCATION-BASED TRIPS:
-            8. When the trip structure is "furthest point by location" (not distance), NO STOPS should be placed in the first 70% of the departure journey from start to furthest point
-            9. All stops (except the starting location) should be concentrated around the furthest point location
-            10. This ensures the trip is focused on exploring the destination area rather than making random stops along the way
-            11. The journey to the furthest point should be direct and efficient with minimal or no intermediate stops
-            12. Only place stops near the furthest point and on the return journey if applicable
-
-            LOCATION VERIFICATION PROTOCOL - MANDATORY FOR EVERY STOP:
-            13. Before including ANY location, mentally verify it as either 'REAL' or 'FAKE'
-            14. REAL locations have: specific business names, verifiable addresses, known operating status
-            15. FAKE locations include: generic descriptions, made-up names, vague addresses, non-existent businesses
-            16. If a location is identified as 'FAKE', immediately find a REAL alternative nearby that fits the same requirements
-            17. Use your knowledge of actual businesses, attractions, and landmarks in the area
-            18. Cross-reference with known establishments in the region
-            19. Prioritize well-established, recognizable businesses and attractions
-            20. When in doubt, choose the more famous/established option rather than obscure ones
-
             Your response must be a valid JSON object only, with no additional text, following this structure:
             {
               "title": "Trip title reflecting the direct journey route",
-              "summary": "A short overview emphasizing the efficient, direct route taken",
+              "summary": "A short overview emphasizing the efficient, direct route taken and adherence to the 70% rule",
               "stops": [
                 {
                   "name": "EXACT NAME of a real business/location (e.g., 'McDonald's Mentone', 'Healesville Sanctuary', 'Yering Station Winery')",
@@ -93,8 +118,8 @@ serve(async (req) => {
                   "suggestedDuration": "Time to spend in minutes",
                   "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
                   "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)",
-                  "routeJustification": "Brief explanation of why this stop makes sense on the direct route and adheres to the stop distribution rule",
-                  "verificationStatus": "REAL - confirmed as existing business/location with verifiable details"
+                  "routeJustification": "Brief explanation of why this stop makes sense on the direct route and adheres to the 70% rule",
+                  "verificationStatus": "REAL - [business name] is a verified existing business/location at [specific address]"
                 },
                 ...
               ]
@@ -112,7 +137,7 @@ serve(async (req) => {
             9. Do NOT use placeholder locations or made-up business names
             10. Each location must have a verifiable street address, not just suburb names
             11. MOST IMPORTANTLY: Every stop must be positioned logically along the direct route - NO MAJOR DETOURS
-            12. CRITICAL: Follow the stop distribution rule - no stops in first 70% of journey for location-based trips
+            12. CRITICAL: Follow the 70% rule - no stops in first 70% of journey for location-based trips
             13. VERIFY EACH LOCATION: Every stop must pass the REAL vs FAKE verification before inclusion
 
             ROUTE EFFICIENCY VALIDATION:
@@ -123,26 +148,21 @@ serve(async (req) => {
             - Consider the transportation method when determining route efficiency
             - For location-based trips, ensure stops are concentrated around the furthest point, not scattered along the journey
             - Apply the REAL vs FAKE verification to every potential stop
-
-            VERIFICATION EXAMPLES:
-            REAL: "Healesville Sanctuary, Badger Creek Road, Healesville VIC 3777" - Known wildlife sanctuary with specific address
-            FAKE: "Local Wildlife Park, Main Street, Healesville" - Generic name, vague address
-            REAL: "Innocent Bystander, 336 Maroondah Highway, Healesville VIC 3777" - Actual winery/restaurant with specific address
-            FAKE: "Cozy Mountain Cafe, Town Centre, Healesville" - Generic name, no specific address
+            - Strictly enforce the 70% rule for location-based trips
 
             Only return valid JSON. Do not include any explanations, notes, or text outside the JSON object.
             Every stop must have all the fields listed above with REAL, VERIFIABLE information.
             Ensure exact field names as specified.
             Travel times and distances should be realistic and reflect the direct routing.
             Include at least one food stop around a logical meal time positioned along the route.
-            Each stop MUST include the verificationStatus field confirming it as REAL.` 
+            Each stop MUST include the verificationStatus field confirming it as REAL with specific business verification.` 
           },
           { 
             role: 'user', 
             content: prompt 
           }
         ],
-        temperature: 0.1, // Even lower temperature for maximum factual accuracy
+        temperature: 0.05, // Extremely low temperature for maximum consistency and rule adherence
       }),
     });
 
