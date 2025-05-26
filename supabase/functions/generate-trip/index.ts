@@ -63,6 +63,13 @@ serve(async (req) => {
             6. Each stop should be logically positioned between the previous stop and the destination
             7. If returning to start, create an efficient loop - don't backtrack unnecessarily
 
+            CRITICAL STOP DISTRIBUTION RULE FOR LOCATION-BASED TRIPS:
+            8. When the trip structure is "furthest point by location" (not distance), NO STOPS should be placed in the first 70% of the departure journey from start to furthest point
+            9. All stops (except the starting location) should be concentrated around the furthest point location
+            10. This ensures the trip is focused on exploring the destination area rather than making random stops along the way
+            11. The journey to the furthest point should be direct and efficient with minimal or no intermediate stops
+            12. Only place stops near the furthest point and on the return journey if applicable
+
             Your response must be a valid JSON object only, with no additional text, following this structure:
             {
               "title": "Trip title reflecting the direct journey route",
@@ -76,7 +83,7 @@ serve(async (req) => {
                   "suggestedDuration": "Time to spend in minutes",
                   "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
                   "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)",
-                  "routeJustification": "Brief explanation of why this stop makes sense on the direct route"
+                  "routeJustification": "Brief explanation of why this stop makes sense on the direct route and adheres to the stop distribution rule"
                 },
                 ...
               ]
@@ -94,6 +101,7 @@ serve(async (req) => {
             9. Do NOT use placeholder locations or made-up business names
             10. Each location must have a verifiable street address, not just suburb names
             11. MOST IMPORTANTLY: Every stop must be positioned logically along the direct route - NO MAJOR DETOURS
+            12. CRITICAL: Follow the stop distribution rule - no stops in first 70% of journey for location-based trips
 
             ROUTE EFFICIENCY VALIDATION:
             - Before suggesting any stop, mentally map the route from start → stop → destination
@@ -101,6 +109,7 @@ serve(async (req) => {
             - Reject any location that requires significant backtracking or detours
             - Prioritize attractions that are naturally positioned along the main route
             - Consider the transportation method when determining route efficiency
+            - For location-based trips, ensure stops are concentrated around the furthest point, not scattered along the journey
 
             Only return valid JSON. Do not include any explanations, notes, or text outside the JSON object.
             Every stop must have all the fields listed above with REAL, VERIFIABLE information.
