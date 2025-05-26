@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +26,7 @@ interface TripStop {
   suggestedDuration: string;
   distanceFromPrevious: string;
   travelTimeFromPrevious: string;
+  imageUrl?: string; // Add support for generated images
 }
 
 const TripSummary = () => {
@@ -98,7 +100,7 @@ const TripSummary = () => {
   };
   
   const generateTrip = async () => {
-    setLoading(true);
+    console.log('Starting trip generation...');
     setGeneratingTrip(true);
     
     try {
@@ -117,6 +119,7 @@ const TripSummary = () => {
       
       // Generate the prompt
       const prompt = generatePrompt(tripSettings);
+      console.log('Generated prompt:', prompt);
       
       // Save the prompt in the trip description first
       if (tripId) {
@@ -133,16 +136,34 @@ const TripSummary = () => {
         if (saveError) throw saveError;
       }
       
+      console.log('Calling generate-trip edge function...');
+      
       // Call our secure edge function to generate the trip using OpenAI
       const { data, error } = await supabase.functions.invoke('generate-trip', {
         body: { prompt },
       });
       
-      if (error) throw error;
+      console.log('Edge function response:', { data, error });
+      
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(`Edge function error: ${error.message}`);
+      }
+      
+      if (!data) {
+        throw new Error('No data returned from edge function');
+      }
       
       if (!data.success) {
+        console.error('Generation failed:', data);
         throw new Error(data.error || 'Failed to generate trip');
       }
+      
+      if (!data.itinerary) {
+        throw new Error('No itinerary in response');
+      }
+      
+      console.log('Trip generated successfully:', data.itinerary);
       
       // Set the itinerary in state
       setItinerary(data.itinerary);
@@ -160,7 +181,10 @@ const TripSummary = () => {
           })
           .eq('id', tripId);
           
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('Error saving itinerary to database:', updateError);
+          throw updateError;
+        }
       }
       
       toast({
@@ -168,14 +192,14 @@ const TripSummary = () => {
         description: "Your custom trip itinerary has been created!",
       });
     } catch (error: any) {
+      console.error("Trip generation error:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to generate trip.",
         variant: "destructive",
       });
-      console.error("Trip generation error:", error);
     } finally {
-      setLoading(false);
+      console.log('Trip generation completed, clearing loading state');
       setGeneratingTrip(false);
     }
   };
@@ -482,7 +506,7 @@ IMPORTANT GUIDELINES:
                     <Button 
                       onClick={generateTrip}
                       className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                      disabled={loading}
+                      disabled={generatingTrip}
                     >
                       {generatingTrip ? 'Generating...' : 'Generate My Trip'} 
                       <Rocket size={16} />
