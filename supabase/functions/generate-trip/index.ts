@@ -65,8 +65,7 @@ serve(async (req) => {
                   "description": "A fun and engaging description of what to do here written in a helpful, enthusiastic tone",
                   "suggestedDuration": "Time to spend in minutes",
                   "distanceFromPrevious": "Distance in miles from the previous stop (0 for the first stop)",
-                  "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)",
-                  "imagePrompt": "A detailed description for generating an image of this location"
+                  "travelTimeFromPrevious": "Travel time in minutes from previous stop (0 for the first stop)"
                 },
                 ...
               ]
@@ -76,8 +75,7 @@ serve(async (req) => {
             Every stop must have all the fields listed above.
             Ensure exact field names as specified.
             Travel times and distances should be realistic based on the transportation method.
-            Include at least one food stop around a logical meal time.
-            For the imagePrompt field, create a detailed, visual description that would help generate a representative image of the location.` 
+            Include at least one food stop around a logical meal time.` 
           },
           { 
             role: 'user', 
@@ -121,58 +119,6 @@ serve(async (req) => {
       itinerary = JSON.parse(content);
       
       console.log('Successfully parsed itinerary JSON');
-      
-      // Generate images for each stop if we have a valid itinerary
-      if (itinerary && itinerary.stops && Array.isArray(itinerary.stops)) {
-        console.log(`Generating images for ${itinerary.stops.length} stops`);
-        
-        // Process stops sequentially to avoid rate limiting
-        for (let i = 0; i < itinerary.stops.length; i++) {
-          const stop = itinerary.stops[i];
-          if (stop.imagePrompt) {
-            try {
-              console.log(`Generating image for stop ${i + 1}: ${stop.name}`);
-              
-              // Call OpenAI image generation API
-              const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${openAIApiKey}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  model: 'dall-e-3',
-                  prompt: `A photorealistic image of ${stop.name}: ${stop.imagePrompt}`,
-                  n: 1,
-                  size: '1024x1024',
-                  quality: 'standard',
-                }),
-              });
-              
-              if (!imageResponse.ok) {
-                const imageErrorText = await imageResponse.text();
-                console.error(`Image generation error for stop ${i + 1}:`, imageErrorText);
-                continue; // Skip to next stop if image generation fails
-              }
-              
-              const imageData = await imageResponse.json();
-              if (imageData.data && imageData.data[0] && imageData.data[0].url) {
-                stop.imageUrl = imageData.data[0].url;
-                console.log(`Successfully generated image for stop ${i + 1}`);
-              } else {
-                console.error(`Unexpected image response format for stop ${i + 1}:`, imageData);
-              }
-            } catch (imageError) {
-              console.error(`Error generating image for stop ${i + 1}:`, imageError);
-            }
-          }
-          
-          // Add a small delay between image requests to avoid rate limiting
-          if (i < itinerary.stops.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-      }
     } catch (parseError) {
       console.error('Error parsing itinerary JSON:', parseError);
       console.log('Raw content:', data.choices[0].message.content);
