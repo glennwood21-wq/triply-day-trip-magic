@@ -13,7 +13,8 @@ const corsHeaders = {
 
 // Suspicious pattern blacklist for immediate rejection
 const SUSPICIOUS_PATTERNS = [
-  /\b\d+\/\d+[A-Za-z]?\b/,                    // "1/1A", "1/2-4"
+  /\b\d+\/\d+[A-Za-z]?\b/,                    // "1/1A", "1/2-4", "1/1-3"
+  /\b\d+\/\d+-\d+\b/,                         // "1/2-4", "2/3-5" 
   /corner\s+of\s+\w+\s+and\s+\w+/i,          // "Corner of X and Y"
   /\blocal\s+(cafe|restaurant|bar|shop)\b/i,  // "Local Cafe"
   /\b(generic|main|central)\s+\w+/i,          // "Generic Park", "Main Street"
@@ -22,6 +23,8 @@ const SUSPICIOUS_PATTERNS = [
   /\btown\s+(centre|center)\b/i,              // "Town Centre"
   /\bstation\s+street\b/i,                    // "Station Street" (too generic)
   /^\d+\s+\w+$/,                              // Just "123 Main" without more detail
+  /\bthe\s+\w+\s+(cafe|deli|restaurant|bar)\b/i, // "The Something Cafe/Deli"
+  /\b\d+[A-Za-z]?\s*-\s*\d+[A-Za-z]?\s+\w+/,     // "1-3 Something", "2A-4B Road"
 ];
 
 // Real-time location verification using Google Places API
@@ -108,32 +111,57 @@ async function regenerateFailedLocation(
   originalPrompt: string,
   itinerary: any,
   failedLocationIndex: number,
-  context: string
+  context: string,
+  failureReason?: string
 ): Promise<{ success: boolean; newLocation?: any; error?: string }> {
   try {
     console.log(`Regenerating location at index ${failedLocationIndex}`);
     
     const failedStop = itinerary.stops[failedLocationIndex];
+    
+    // Create specific instructions based on failure reason
+    let avoidanceInstructions = '';
+    if (failureReason && failureReason.includes('suspicious pattern')) {
+      avoidanceInstructions = `
+*** CRITICAL: AVOID THESE EXACT PATTERNS THAT CAUSED THE FAILURE ***
+- NO addresses like "1/1-3", "1/2-4", "2/3-5" or any "number/number-number" format
+- NO addresses like "1-3 Something", "2A-4B Road" or "number-number" formats  
+- NO generic names like "The [Something] Cafe", "The [Something] Deli"
+- NO made-up unit numbers or shop numbers
+- Use ONLY simple street addresses like "123 Main Street" or "45 High Street"
+- Use ONLY well-known, established businesses with verified names
+      `;
+    }
+    
     const regenerationPrompt = `
 Based on this original trip request: "${originalPrompt}"
 
 The following location failed verification and needs to be replaced:
 "${failedStop.name}" at "${failedStop.location}"
+Failure reason: ${failureReason || 'Failed verification'}
 
 Context: ${context}
 
+${avoidanceInstructions}
+
 Please provide a single REAL, VERIFIED replacement location that:
-1. Is a real, existing business/attraction
+1. Is a real, existing business/attraction (use well-known chains or landmarks if unsure)
 2. Fits the same type: ${failedStop.type}
 3. Is in the same general area/route
-4. Has a complete street address
+4. Has a SIMPLE, complete street address (no unit numbers, no complex formatting)
 5. Follows the same route efficiency rules
+6. Uses ESTABLISHED businesses (McDonald's, KFC, parks, well-known attractions)
+
+EXAMPLES OF GOOD ADDRESSES:
+- "McDonald's, 123 Main Street, Suburb VIC 3000, Australia"
+- "Centennial Park, Oxford Street, Paddington NSW 2021, Australia"
+- "Royal Botanic Gardens, Birdwood Avenue, Melbourne VIC 3004, Australia"
 
 Return ONLY a JSON object with this exact structure:
 {
-  "name": "Exact real business name",
+  "name": "Exact real business name (prefer well-known brands/landmarks)",
   "type": "${failedStop.type}",
-  "location": "Complete street address with suburb, state, postcode",
+  "location": "Simple street address with suburb, state, postcode (NO unit numbers)",
   "description": "Description of what to do here",
   "suggestedDuration": "${failedStop.suggestedDuration}",
   "distanceFromPrevious": "${failedStop.distanceFromPrevious}",
@@ -197,9 +225,18 @@ async function parseAndVerifyItinerary(content: string, originalPrompt: string):
     const stop = itinerary.stops[i];
     
     // Check for suspicious patterns first
-    if (detectSuspiciousPatterns(stop.name) || detectSuspiciousPatterns(stop.location)) {
-      console.log(`❌ Stop ${i}: Failed pattern check - ${stop.name}`);
-      verificationResults.push({ index: i, status: 'pattern_failure', stop });
+    const nameHasSuspiciousPattern = detectSuspiciousPatterns(stop.name);
+    const locationHasSuspiciousPattern = detectSuspiciousPatterns(stop.location);
+    
+    if (nameHasSuspiciousPattern || locationHasSuspiciousPattern) {
+      const patternDetails = nameHasSuspiciousPattern ? `name: "${stop.name}"` : `location: "${stop.location}"`;
+      console.log(`❌ Stop ${i}: Failed pattern check - ${stop.name} (${patternDetails})`);
+      verificationResults.push({ 
+        index: i, 
+        status: 'pattern_failure', 
+        stop,
+        failureReason: `suspicious pattern in ${patternDetails}` 
+      });
       hasFailures = true;
       continue;
     }
@@ -218,7 +255,13 @@ async function parseAndVerifyItinerary(content: string, originalPrompt: string):
       verificationResults.push({ index: i, status: 'verified', stop });
     } else {
       console.log(`❌ Stop ${i}: Failed verification - ${stop.name}`);
-      verificationResults.push({ index: i, status: 'verification_failure', stop, error: verification.error });
+      verificationResults.push({ 
+        index: i, 
+        status: 'verification_failure', 
+        stop, 
+        error: verification.error,
+        failureReason: `Google Places verification failed: ${verification.error}` 
+      });
       hasFailures = true;
     }
   }
@@ -240,11 +283,22 @@ async function parseAndVerifyItinerary(content: string, originalPrompt: string):
             originalPrompt,
             itinerary,
             result.index,
-            context
+            context,
+            result.failureReason
           );
           
           if (regeneration.success && regeneration.newLocation) {
-            // Verify the regenerated location
+            // First, check if regenerated location has suspicious patterns
+            const regeneratedNamePattern = detectSuspiciousPatterns(regeneration.newLocation.name);
+            const regeneratedLocationPattern = detectSuspiciousPatterns(regeneration.newLocation.location);
+            
+            if (regeneratedNamePattern || regeneratedLocationPattern) {
+              const patternType = regeneratedNamePattern ? 'name' : 'location';
+              console.log(`❌ Regenerated location has suspicious pattern in ${patternType} (attempt ${attempt})`);
+              continue; // Try next attempt
+            }
+            
+            // Verify the regenerated location with Google Places
             const reVerification = await verifyLocationWithGooglePlaces(
               `${regeneration.newLocation.name} ${regeneration.newLocation.location}`
             );
@@ -261,8 +315,10 @@ async function parseAndVerifyItinerary(content: string, originalPrompt: string):
               regenerationSuccess = true;
               break;
             } else {
-              console.log(`❌ Regenerated location failed verification (attempt ${attempt})`);
+              console.log(`❌ Regenerated location failed Google Places verification (attempt ${attempt})`);
             }
+          } else {
+            console.log(`❌ Failed to generate replacement location (attempt ${attempt})`);
           }
         }
         
