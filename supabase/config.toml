@@ -31,3 +31,6 @@ enabled = false
 
 [functions.generate-trip]
 verify_jwt = true
+
+[functions.audit-trip-itinerary]
+verify_jwt = false

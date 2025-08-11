@@ -200,52 +200,67 @@ serve(async (req) => {
       
       console.log('Successfully parsed itinerary JSON');
       
-      // Enhanced validation for direct routing
+      // Stage 4: Comprehensive Trip Auditing
       if (itinerary && itinerary.stops && Array.isArray(itinerary.stops)) {
-        console.log('Validating route efficiency and location addresses...');
+        console.log('Starting comprehensive trip audit...');
         
-        for (let i = 0; i < itinerary.stops.length; i++) {
-          const stop = itinerary.stops[i];
-          
-          // Check if location has a specific street address
-          if (!stop.location || 
-              !stop.location.includes(',') || 
-              !stop.location.includes('Australia') ||
-              stop.location.split(',').length < 3) {
-            console.warn(`Stop ${i + 1} (${stop.name}) may have incomplete address: ${stop.location}`);
-          }
-          
-          // Check if name seems generic
-          if (stop.name && (
-              stop.name.toLowerCase().includes('tours') ||
-              stop.name.toLowerCase().includes('general') ||
-              stop.name.toLowerCase().includes('various') ||
-              stop.name.toLowerCase().includes('multiple')
-            )) {
-            console.warn(`Stop ${i + 1} may have generic name: ${stop.name}`);
-          }
+        // Extract trip parameters for auditing
+        const promptLower = prompt.toLowerCase();
+        const startLocationMatch = prompt.match(/(?:starting from|from)\s+([^,.]+)/i);
+        const startLocation = startLocationMatch ? startLocationMatch[1].trim() : 'Unknown';
+        const returnToStart = promptLower.includes('return') || promptLower.includes('round trip');
+        
+        try {
+          // Call audit function
+          const auditResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/audit-trip-itinerary`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({
+              itinerary,
+              startLocation,
+              returnToStart
+            }),
+          });
 
-          // Validate route efficiency
-          if (i > 0) {
-            const prevDistance = parseFloat(itinerary.stops[i-1].distanceFromPrevious) || 0;
-            const currentDistance = parseFloat(stop.distanceFromPrevious) || 0;
+          if (auditResponse.ok) {
+            const auditResult = await auditResponse.json();
             
-            // Check for suspiciously long distances between consecutive stops
-            if (currentDistance > 50) {
-              console.warn(`Stop ${i + 1} (${stop.name}) is unusually far from previous stop: ${currentDistance} miles`);
+            if (auditResult.success && auditResult.issues.length > 0) {
+              console.log(`Audit found ${auditResult.issues.length} issues, using audited itinerary`);
+              console.log('Issues:', auditResult.issues);
+              
+              if (Object.keys(auditResult.replacements).length > 0) {
+                console.log('Replacements made:', Object.keys(auditResult.replacements).length);
+              }
+              
+              // Use the audited itinerary
+              itinerary = auditResult.auditedItinerary;
+              
+              // Add audit information to response
+              itinerary.auditInfo = {
+                issuesFound: auditResult.issues.length,
+                replacementsMade: Object.keys(auditResult.replacements).length,
+                issues: auditResult.issues,
+                replacements: auditResult.replacements
+              };
+            } else {
+              console.log('Audit completed - no issues found');
+              itinerary.auditInfo = {
+                issuesFound: 0,
+                replacementsMade: 0,
+                issues: [],
+                replacements: {}
+              };
             }
-            
-            // Check travel time reasonableness
-            const travelTime = parseInt(stop.travelTimeFromPrevious) || 0;
-            if (travelTime > 120) {
-              console.warn(`Stop ${i + 1} (${stop.name}) has excessive travel time: ${travelTime} minutes`);
-            }
+          } else {
+            console.warn('Audit function failed, continuing with original itinerary');
           }
-          
-          // Check for route justification field
-          if (!stop.routeJustification) {
-            console.warn(`Stop ${i + 1} (${stop.name}) missing route justification`);
-          }
+        } catch (auditError) {
+          console.warn('Audit function error:', auditError.message);
+          console.log('Continuing with original itinerary');
         }
       }
       
