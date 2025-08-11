@@ -74,7 +74,7 @@ serve(async (req) => {
       
       try {
         // Use the legacy Places Autocomplete API
-        let placesUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=geocode|establishment`;
+        let placesUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=(cities)`;
         
         // Add location bias if available
         if (hasLocation) {
