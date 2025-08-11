@@ -2,13 +2,293 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 
-// Retrieve the OpenAI API key from environment variables
+// Retrieve API keys from environment variables
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const googleMapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Suspicious pattern blacklist for immediate rejection
+const SUSPICIOUS_PATTERNS = [
+  /\b\d+\/\d+[A-Za-z]?\b/,                    // "1/1A", "1/2-4"
+  /corner\s+of\s+\w+\s+and\s+\w+/i,          // "Corner of X and Y"
+  /\blocal\s+(cafe|restaurant|bar|shop)\b/i,  // "Local Cafe"
+  /\b(generic|main|central)\s+\w+/i,          // "Generic Park", "Main Street"
+  /\beach\s+park\b/i,                         // "Beach Park"
+  /\bmountain\s+view\s+\w+/i,                 // "Mountain View Restaurant"
+  /\btown\s+(centre|center)\b/i,              // "Town Centre"
+  /\bstation\s+street\b/i,                    // "Station Street" (too generic)
+  /^\d+\s+\w+$/,                              // Just "123 Main" without more detail
+];
+
+// Real-time location verification using Google Places API
+async function verifyLocationWithGooglePlaces(locationString: string): Promise<{
+  isReal: boolean;
+  verifiedName?: string;
+  verifiedAddress?: string;
+  coordinates?: { lat: number; lng: number };
+  error?: string;
+}> {
+  try {
+    console.log(`Verifying location: "${locationString}"`);
+    
+    const encodedLocation = encodeURIComponent(locationString);
+    const placesUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodedLocation}&key=${googleMapsApiKey}`;
+    
+    const response = await fetch(placesUrl);
+    const data = await response.json();
+    
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      const place = data.results[0];
+      
+      // Additional validation - check if it's a legitimate business/location
+      const hasValidTypes = place.types && place.types.some((type: string) => 
+        !['establishment', 'point_of_interest'].includes(type) || 
+        place.types.includes('tourist_attraction') ||
+        place.types.includes('restaurant') ||
+        place.types.includes('store') ||
+        place.types.includes('lodging')
+      );
+      
+      if (hasValidTypes && place.business_status !== 'CLOSED_PERMANENTLY') {
+        console.log(`✅ Verified: ${place.name} at ${place.formatted_address}`);
+        return {
+          isReal: true,
+          verifiedName: place.name,
+          verifiedAddress: place.formatted_address,
+          coordinates: place.geometry?.location
+        };
+      }
+    }
+    
+    console.log(`❌ Failed verification: "${locationString}" - ${data.status}`);
+    return {
+      isReal: false,
+      error: `Location not found or invalid: ${data.status}`
+    };
+  } catch (error) {
+    console.error(`Error verifying location "${locationString}":`, error);
+    return {
+      isReal: false,
+      error: `Verification failed: ${error.message}`
+    };
+  }
+}
+
+// Detect suspicious patterns before API calls
+function detectSuspiciousPatterns(locationString: string): boolean {
+  const normalizedLocation = locationString.toLowerCase().trim();
+  
+  for (const pattern of SUSPICIOUS_PATTERNS) {
+    if (pattern.test(normalizedLocation)) {
+      console.log(`🚨 Suspicious pattern detected: "${locationString}" matches ${pattern}`);
+      return true;
+    }
+  }
+  
+  // Additional checks
+  if (normalizedLocation.length < 5) {
+    console.log(`🚨 Location too short: "${locationString}"`);
+    return true;
+  }
+  
+  if (!normalizedLocation.includes(' ')) {
+    console.log(`🚨 Location lacks proper formatting: "${locationString}"`);
+    return true;
+  }
+  
+  return false;
+}
+
+// Regenerate a single failed location with OpenAI
+async function regenerateFailedLocation(
+  originalPrompt: string,
+  itinerary: any,
+  failedLocationIndex: number,
+  context: string
+): Promise<{ success: boolean; newLocation?: any; error?: string }> {
+  try {
+    console.log(`Regenerating location at index ${failedLocationIndex}`);
+    
+    const failedStop = itinerary.stops[failedLocationIndex];
+    const regenerationPrompt = `
+Based on this original trip request: "${originalPrompt}"
+
+The following location failed verification and needs to be replaced:
+"${failedStop.name}" at "${failedStop.location}"
+
+Context: ${context}
+
+Please provide a single REAL, VERIFIED replacement location that:
+1. Is a real, existing business/attraction
+2. Fits the same type: ${failedStop.type}
+3. Is in the same general area/route
+4. Has a complete street address
+5. Follows the same route efficiency rules
+
+Return ONLY a JSON object with this exact structure:
+{
+  "name": "Exact real business name",
+  "type": "${failedStop.type}",
+  "location": "Complete street address with suburb, state, postcode",
+  "description": "Description of what to do here",
+  "suggestedDuration": "${failedStop.suggestedDuration}",
+  "distanceFromPrevious": "${failedStop.distanceFromPrevious}",
+  "travelTimeFromPrevious": "${failedStop.travelTimeFromPrevious}",
+  "routeJustification": "Why this stop makes sense on the route",
+  "verificationStatus": "REAL - [business name] is verified at [address]"
+}`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a location verification expert. Only suggest real, existing businesses with complete addresses.' },
+          { role: 'user', content: regenerationPrompt }
+        ],
+        temperature: 0.1,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const newLocation = JSON.parse(data.choices[0].message.content);
+      
+      console.log(`Generated replacement: ${newLocation.name}`);
+      return { success: true, newLocation };
+    } else {
+      return { success: false, error: 'Failed to generate replacement' };
+    }
+  } catch (error) {
+    console.error('Error regenerating location:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Parse and verify complete itinerary with regeneration
+async function parseAndVerifyItinerary(content: string, originalPrompt: string): Promise<any> {
+  let itinerary;
+  
+  try {
+    itinerary = JSON.parse(content);
+  } catch (error) {
+    throw new Error(`Failed to parse OpenAI response: ${error.message}`);
+  }
+  
+  if (!itinerary.stops || !Array.isArray(itinerary.stops)) {
+    throw new Error('Invalid itinerary format - missing stops array');
+  }
+  
+  console.log(`🔍 Starting verification of ${itinerary.stops.length} stops`);
+  
+  const verificationResults = [];
+  let hasFailures = false;
+  
+  // Phase 1: Pattern detection and initial verification
+  for (let i = 0; i < itinerary.stops.length; i++) {
+    const stop = itinerary.stops[i];
+    
+    // Check for suspicious patterns first
+    if (detectSuspiciousPatterns(stop.name) || detectSuspiciousPatterns(stop.location)) {
+      console.log(`❌ Stop ${i}: Failed pattern check - ${stop.name}`);
+      verificationResults.push({ index: i, status: 'pattern_failure', stop });
+      hasFailures = true;
+      continue;
+    }
+    
+    // Real-time Google Places verification
+    const verification = await verifyLocationWithGooglePlaces(`${stop.name} ${stop.location}`);
+    
+    if (verification.isReal) {
+      console.log(`✅ Stop ${i}: Verified - ${stop.name}`);
+      
+      // Update with verified information
+      if (verification.verifiedName) stop.verifiedName = verification.verifiedName;
+      if (verification.verifiedAddress) stop.verifiedAddress = verification.verifiedAddress;
+      if (verification.coordinates) stop.coordinates = verification.coordinates;
+      
+      verificationResults.push({ index: i, status: 'verified', stop });
+    } else {
+      console.log(`❌ Stop ${i}: Failed verification - ${stop.name}`);
+      verificationResults.push({ index: i, status: 'verification_failure', stop, error: verification.error });
+      hasFailures = true;
+    }
+  }
+  
+  // Phase 2: Regeneration loop for failed locations
+  if (hasFailures) {
+    console.log('🔄 Starting regeneration for failed locations');
+    
+    for (const result of verificationResults) {
+      if (result.status === 'pattern_failure' || result.status === 'verification_failure') {
+        const context = `Stop ${result.index + 1} of ${itinerary.stops.length} in ${itinerary.title}`;
+        
+        // Attempt regeneration up to 3 times
+        let regenerationSuccess = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          console.log(`Regeneration attempt ${attempt} for stop ${result.index}`);
+          
+          const regeneration = await regenerateFailedLocation(
+            originalPrompt,
+            itinerary,
+            result.index,
+            context
+          );
+          
+          if (regeneration.success && regeneration.newLocation) {
+            // Verify the regenerated location
+            const reVerification = await verifyLocationWithGooglePlaces(
+              `${regeneration.newLocation.name} ${regeneration.newLocation.location}`
+            );
+            
+            if (reVerification.isReal) {
+              console.log(`✅ Successfully regenerated stop ${result.index}: ${regeneration.newLocation.name}`);
+              
+              // Update with verified regenerated location
+              itinerary.stops[result.index] = regeneration.newLocation;
+              if (reVerification.verifiedName) itinerary.stops[result.index].verifiedName = reVerification.verifiedName;
+              if (reVerification.verifiedAddress) itinerary.stops[result.index].verifiedAddress = reVerification.verifiedAddress;
+              if (reVerification.coordinates) itinerary.stops[result.index].coordinates = reVerification.coordinates;
+              
+              regenerationSuccess = true;
+              break;
+            } else {
+              console.log(`❌ Regenerated location failed verification (attempt ${attempt})`);
+            }
+          }
+        }
+        
+        // If all regeneration attempts failed, remove the stop
+        if (!regenerationSuccess) {
+          console.log(`❌ Removing failed stop ${result.index}: ${result.stop.name}`);
+          itinerary.stops[result.index] = null; // Mark for removal
+        }
+      }
+    }
+    
+    // Remove null stops (failed regenerations)
+    itinerary.stops = itinerary.stops.filter(stop => stop !== null);
+    
+    // Add verification metadata
+    itinerary.verificationInfo = {
+      originalStopsCount: verificationResults.length,
+      finalStopsCount: itinerary.stops.length,
+      verificationsPerformed: verificationResults.length,
+      regenerationsAttempted: verificationResults.filter(r => r.status !== 'verified').length,
+      timestamp: new Date().toISOString()
+    };
+  }
+  
+  return itinerary;
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -37,7 +317,19 @@ serve(async (req) => {
       throw new Error('OpenAI API key appears to be invalid. Please check the OPENAI_API_KEY secret in your Supabase project.');
     }
     
+    // Validate Google Maps API key
+    if (!googleMapsApiKey) {
+      console.error('Google Maps API key is not set in environment variables');
+      throw new Error('Google Maps API key is not configured. Please set the GOOGLE_MAPS_API_KEY secret in your Supabase project.');
+    }
+    
+    if (googleMapsApiKey.length < 20) {
+      console.error('Google Maps API key appears to be in invalid format');
+      throw new Error('Google Maps API key appears to be invalid. Please check the GOOGLE_MAPS_API_KEY secret in your Supabase project.');
+    }
+    
     console.log('Using valid OpenAI API key format, first 4 chars:', openAIApiKey.substring(0, 4));
+    console.log('Using Google Maps API key, length:', googleMapsApiKey.length);
 
     // Make the request to OpenAI
     console.log('Sending request to OpenAI API...');
@@ -195,10 +487,14 @@ serve(async (req) => {
       const content = data.choices[0].message.content;
       console.log('Raw content from OpenAI (first 100 chars):', content.substring(0, 100));
       
-      // Attempt to parse the JSON response
-      itinerary = JSON.parse(content);
+      // CRITICAL: Real-time verification BEFORE any other processing
+      console.log('🔥 Starting REAL-TIME VERIFICATION of all locations');
+      itinerary = await parseAndVerifyItinerary(content, prompt);
       
-      console.log('Successfully parsed itinerary JSON');
+      console.log(`✅ Verification complete: ${itinerary.stops.length} verified stops`);
+      if (itinerary.verificationInfo) {
+        console.log(`Verification summary: ${itinerary.verificationInfo.verificationsPerformed} checks, ${itinerary.verificationInfo.regenerationsAttempted} regenerations`);
+      }
       
       // Stage 4: Comprehensive Trip Auditing
       if (itinerary && itinerary.stops && Array.isArray(itinerary.stops)) {
