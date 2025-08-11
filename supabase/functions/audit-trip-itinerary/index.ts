@@ -101,10 +101,10 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
     return issues;
   }
 
-  // Get coordinates for all locations
-  const startCoords = await getCoordinates(startLocation);
+  // Get coordinates for all locations with retry logic
+  const startCoords = await getCoordinatesWithRetry(startLocation);
   const furthestStop = itinerary.stops[itinerary.stops.length - 1];
-  const furthestCoords = await getCoordinates(furthestStop.location);
+  const furthestCoords = await getCoordinatesWithRetry(furthestStop.location);
 
   if (!startCoords || !furthestCoords) {
     issues.push('Unable to validate route efficiency - coordinates unavailable');
@@ -114,6 +114,13 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
   // Calculate direct route bearing and distance
   const directBearing = calculateBearing(startCoords.lat, startCoords.lng, furthestCoords.lat, furthestCoords.lng);
   const totalDirectDistance = calculateDistance(startCoords.lat, startCoords.lng, furthestCoords.lat, furthestCoords.lng);
+  
+  // Fix division by zero issue - require minimum distance
+  if (totalDirectDistance < 0.1) {
+    issues.push('Start and end locations are too close together for meaningful route validation');
+    return issues;
+  }
+  
   const seventyPercentDistance = totalDirectDistance * 0.7;
   
   console.log(`Direct route: ${totalDirectDistance.toFixed(1)} miles, bearing: ${directBearing.toFixed(1)}°, 70% threshold: ${seventyPercentDistance.toFixed(1)} miles`);
@@ -352,8 +359,12 @@ async function generateReplacementStop(
     return null;
   }
 
-  try {
-    const prompt = `Generate a replacement for this problematic stop:
+  // Attempt up to 3 times to generate a valid replacement
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`Generating replacement for stop ${stopIndex + 1} (attempt ${attempt}/3)...`);
+      
+      const prompt = `Generate a replacement for this problematic stop:
 
 Original Stop: ${originalStop.name} at ${originalStop.location}
 Stop Type: ${originalStop.type}
@@ -361,72 +372,150 @@ Position in Trip: ${stopIndex + 1} of ${allStops.length}
 Start Location: ${startLocation}
 
 Requirements:
-1. Must be a REAL, verifiable business/location
+1. Must be a REAL, verifiable business/location in Australia
 2. Must be positioned logically along the direct route
 3. Must comply with the 70% rule (no stops in first 70% of journey)
 4. Must be the same type as original (${originalStop.type})
-5. Must have complete street address
+5. Must have complete street address including suburb, state, and postcode
 
 Context of other stops:
 ${allStops.map((stop, i) => `${i + 1}. ${stop.name} - ${stop.location}`).join('\n')}
 
-Return ONLY a JSON object with the same structure as the original stop, ensuring all fields are filled with REAL, verified information.`;
+CRITICAL: Return ONLY a JSON object in this exact format:
+{
+  "name": "Real Business Name",
+  "type": "${originalStop.type}",
+  "location": "Complete street address including suburb, state, postcode, Australia",
+  "description": "Brief description of the stop",
+  "suggestedDuration": "30 minutes",
+  "distanceFromPrevious": "5 miles",
+  "travelTimeFromPrevious": "10 minutes"
+}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are a local travel expert that only suggests REAL, verified locations with complete addresses. Return only valid JSON.' 
-          },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 500,
-      }),
-    });
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'You are a local Australian travel expert. Return ONLY valid JSON in the exact format requested. No explanations or markdown.' 
+            },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.2,
+          max_tokens: 300,
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to generate replacement');
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`OpenAI API request failed (attempt ${attempt}): ${response.status}, ${errorText}`);
+        if (attempt === 3) throw new Error(`Failed to generate replacement after 3 attempts: ${response.status}`);
+        continue;
+      }
 
-    const data = await response.json();
-    const content = data.choices[0].message.content;
-    
-    try {
-      // Clean the content to remove markdown formatting
-      let cleanContent = content.trim();
-      if (cleanContent.startsWith('```json')) {
-        cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/```\s*$/, '');
-      } else if (cleanContent.startsWith('```')) {
-        cleanContent = cleanContent.replace(/^```\s*/, '').replace(/```\s*$/, '');
+      const data = await response.json();
+      const content = data.choices[0]?.message?.content;
+      
+      if (!content) {
+        console.error(`No content in OpenAI response (attempt ${attempt})`);
+        if (attempt === 3) throw new Error('No content returned from OpenAI');
+        continue;
       }
       
-      const replacement = JSON.parse(cleanContent);
-      
-      // Validate replacement has required fields
-      if (replacement.name && replacement.location && replacement.type) {
+      try {
+        // Clean the content more aggressively
+        let cleanContent = content.trim();
+        
+        // Remove markdown code blocks
+        cleanContent = cleanContent.replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
+        cleanContent = cleanContent.replace(/^```\s*/i, '').replace(/```\s*$/i, '');
+        
+        // Remove any text before the first {
+        const firstBrace = cleanContent.indexOf('{');
+        if (firstBrace > 0) {
+          cleanContent = cleanContent.substring(firstBrace);
+        }
+        
+        // Remove any text after the last }
+        const lastBrace = cleanContent.lastIndexOf('}');
+        if (lastBrace >= 0 && lastBrace < cleanContent.length - 1) {
+          cleanContent = cleanContent.substring(0, lastBrace + 1);
+        }
+        
+        console.log(`Attempting to parse JSON (attempt ${attempt}):`, cleanContent.substring(0, 100) + '...');
+        
+        const replacement = JSON.parse(cleanContent);
+        
+        // Comprehensive validation of required fields
+        const requiredFields = ['name', 'type', 'location', 'description', 'suggestedDuration', 'distanceFromPrevious', 'travelTimeFromPrevious'];
+        const missingFields = requiredFields.filter(field => !replacement[field] || replacement[field].toString().trim() === '');
+        
+        if (missingFields.length > 0) {
+          console.error(`Generated replacement missing required fields (attempt ${attempt}):`, missingFields);
+          if (attempt === 3) {
+            // Return a fallback replacement with the original data
+            console.log('Using fallback replacement with original data');
+            return {
+              ...originalStop,
+              name: `${originalStop.name} (Verified)`,
+              verificationStatus: 'fallback_used'
+            };
+          }
+          continue;
+        }
+
+        // Validate location includes Australia
+        if (!replacement.location.toLowerCase().includes('australia')) {
+          console.error(`Generated location doesn't include Australia (attempt ${attempt}):`, replacement.location);
+          if (attempt < 3) continue;
+        }
+
+        console.log(`Successfully generated replacement (attempt ${attempt}):`, replacement.name);
         return replacement;
-      } else {
-        console.error('Generated replacement missing required fields');
-        return null;
+        
+      } catch (parseError) {
+        console.error(`Failed to parse replacement JSON (attempt ${attempt}):`, parseError.message);
+        console.error('Raw content:', content);
+        if (attempt === 3) {
+          // Return a fallback replacement
+          console.log('Using fallback replacement due to parse failure');
+          return {
+            ...originalStop,
+            name: `${originalStop.name} (Original)`,
+            verificationStatus: 'parse_failed'
+          };
+        }
       }
-    } catch (parseError) {
-      console.error('Failed to parse replacement JSON:', parseError);
-      console.error('Raw content:', content);
-      return null;
+      
+    } catch (error) {
+      console.error(`Error generating replacement stop (attempt ${attempt}):`, error.message);
+      if (attempt === 3) {
+        // Return a fallback replacement
+        console.log('Using fallback replacement due to generation error');
+        return {
+          ...originalStop,
+          name: `${originalStop.name} (Fallback)`,
+          verificationStatus: 'generation_failed'
+        };
+      }
     }
     
-  } catch (error) {
-    console.error('Error generating replacement stop:', error);
-    return null;
+    // Wait before retrying
+    if (attempt < 3) {
+      const waitTime = attempt * 1000; // 1s, 2s wait
+      console.log(`Waiting ${waitTime}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
+
+  // This should never be reached due to fallbacks above
+  return null;
 }
 
 async function getCoordinates(address: string): Promise<{ lat: number, lng: number } | null> {
@@ -473,6 +562,12 @@ async function validateRouteWithRoutesAPI(
   if (!googleMapsApiKey) {
     console.log('Google Maps API key not available for Routes API');
     return 1.0; // Assume efficient if we can't validate
+  }
+
+  // Fix division by zero - check directDistance
+  if (directDistance < 0.1) {
+    console.log('Direct distance too small for meaningful comparison');
+    return 1.0;
   }
 
   try {
@@ -522,6 +617,7 @@ async function validateRouteWithRoutesAPI(
       units: "IMPERIAL"
     };
 
+    console.log('Sending Routes API request...');
     const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
       method: 'POST',
       headers: {
@@ -533,18 +629,27 @@ async function validateRouteWithRoutesAPI(
     });
 
     if (!response.ok) {
-      console.log('Routes API request failed with status:', response.status);
+      const errorText = await response.text();
+      console.log(`Routes API request failed with status: ${response.status}, error: ${errorText}`);
       return 1.0;
     }
 
     const data = await response.json();
+    console.log('Routes API response received');
 
     if (data.routes && data.routes.length > 0) {
       const route = data.routes[0];
       const totalDistance = route.distanceMeters / 1609.34; // Convert meters to miles
       
-      console.log(`Routes API: Route distance ${totalDistance.toFixed(1)} miles vs direct ${directDistance.toFixed(1)} miles`);
-      return directDistance / totalDistance;
+      // Avoid division by zero on totalDistance
+      if (totalDistance < 0.1) {
+        console.log('Route distance too small for meaningful comparison');
+        return 1.0;
+      }
+      
+      const efficiency = directDistance / totalDistance;
+      console.log(`Routes API: Route distance ${totalDistance.toFixed(1)} miles vs direct ${directDistance.toFixed(1)} miles, efficiency: ${(efficiency * 100).toFixed(1)}%`);
+      return efficiency;
     } else {
       console.log('Routes API returned no valid routes');
       return 1.0; // Assume efficient if API fails
@@ -553,6 +658,49 @@ async function validateRouteWithRoutesAPI(
     console.error('Error calling Routes API:', error);
     return 1.0; // Assume efficient if API fails
   }
+}
+
+// Add retry logic for coordinates with exponential backoff
+async function getCoordinatesWithRetry(address: string, maxRetries: number = 3): Promise<{ lat: number, lng: number } | null> {
+  if (!googleMapsApiKey) {
+    return null;
+  }
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const encodedAddress = encodeURIComponent(address);
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${googleMapsApiKey}`
+      );
+      
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.results.length > 0) {
+        const location = data.results[0].geometry.location;
+        console.log(`Coordinates found for "${address}" on attempt ${attempt + 1}`);
+        return { lat: location.lat, lng: location.lng };
+      } else if (data.status === 'OVER_QUERY_LIMIT') {
+        // Wait before retrying on rate limit
+        const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
+        console.log(`Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      } else {
+        console.log(`Geocoding failed for "${address}": ${data.status}`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error getting coordinates for "${address}" (attempt ${attempt + 1}):`, error);
+      if (attempt === maxRetries - 1) {
+        return null;
+      }
+      // Wait before retrying
+      const waitTime = Math.pow(2, attempt) * 500;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+  
+  return null;
 }
 
 function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
