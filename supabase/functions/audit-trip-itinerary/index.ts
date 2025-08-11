@@ -187,16 +187,10 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
     }
   }
 
-  // 6. OVERALL ROUTE EFFICIENCY CHECK
+  // 6. OVERALL ROUTE EFFICIENCY CHECK using Directions API
   if (stopCoords.every(coord => coord !== null)) {
-    let totalRouteDistance = calculateDistance(startCoords.lat, startCoords.lng, stopCoords[0]!.lat, stopCoords[0]!.lng);
-    
-    for (let i = 1; i < stopCoords.length; i++) {
-      totalRouteDistance += calculateDistance(stopCoords[i-1]!.lat, stopCoords[i-1]!.lng, stopCoords[i]!.lat, stopCoords[i]!.lng);
-    }
-    
-    const routeEfficiency = totalDirectDistance / totalRouteDistance;
-    if (routeEfficiency < 0.7) { // Route should be at least 70% efficient
+    const routeEfficiency = await validateRouteWithDirectionsAPI(startCoords, stopCoords, totalDirectDistance);
+    if (routeEfficiency < 0.7) {
       issues.push(`Overall route efficiency too low: ${(routeEfficiency * 100).toFixed(1)}% (minimum: 70%)`);
     }
   }
@@ -244,28 +238,55 @@ async function verifyLocations(itinerary: TripItinerary): Promise<string[]> {
 
 async function verifyLocationExists(address: string, businessName: string): Promise<{ exists: boolean, reason: string }> {
   try {
+    // First verify address with Geocoding API (still current)
     const encodedAddress = encodeURIComponent(address);
-    const response = await fetch(
+    const geocodeResponse = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${googleMapsApiKey}`
     );
     
-    const data = await response.json();
+    const geocodeData = await geocodeResponse.json();
     
-    if (data.status === 'OK' && data.results.length > 0) {
-      // Additional check for business name if available
-      const placesResponse = await fetch(
-        `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(businessName)}&inputtype=textquery&key=${googleMapsApiKey}`
-      );
+    if (geocodeData.status !== 'OK' || geocodeData.results.length === 0) {
+      return { exists: false, reason: `Address not found: ${geocodeData.status}` };
+    }
+
+    // Check for suspicious address patterns
+    const suspiciousPatterns = [/^\d+\/\d+/, /^unit \d+/, /apartment/, /suite \d+/i];
+    if (suspiciousPatterns.some(pattern => pattern.test(address))) {
+      return { exists: false, reason: 'Suspicious address pattern detected' };
+    }
+    
+    // Use New Places API Text Search to verify business
+    const placesResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': googleMapsApiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.businessStatus,places.types'
+      },
+      body: JSON.stringify({
+        textQuery: businessName,
+        maxResultCount: 5
+      })
+    });
+    
+    if (!placesResponse.ok) {
+      return { exists: false, reason: 'Places API request failed' };
+    }
+    
+    const placesData = await placesResponse.json();
+    
+    if (placesData.places && placesData.places.length > 0) {
+      const place = placesData.places[0];
       
-      const placesData = await placesResponse.json();
-      
-      if (placesData.status === 'OK' && placesData.candidates.length > 0) {
-        return { exists: true, reason: 'Verified via Google Places' };
-      } else {
-        return { exists: false, reason: 'Business name not found in Google Places' };
+      // Check if business is operational
+      if (place.businessStatus === 'CLOSED_PERMANENTLY') {
+        return { exists: false, reason: 'Business permanently closed' };
       }
+      
+      return { exists: true, reason: 'Verified via New Places API' };
     } else {
-      return { exists: false, reason: `Geocoding failed: ${data.status}` };
+      return { exists: false, reason: 'Business not found in Places API' };
     }
   } catch (error) {
     return { exists: false, reason: `Verification error: ${error.message}` };
@@ -442,6 +463,49 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
             Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+async function validateRouteWithDirectionsAPI(
+  startCoords: { lat: number, lng: number },
+  stopCoords: ({ lat: number, lng: number } | null)[],
+  directDistance: number
+): Promise<number> {
+  if (!googleMapsApiKey) {
+    console.log('Google Maps API key not available for Directions API');
+    return 1.0; // Assume efficient if we can't validate
+  }
+
+  try {
+    // Build waypoints for Directions API
+    const validStops = stopCoords.filter(coord => coord !== null) as { lat: number, lng: number }[];
+    if (validStops.length === 0) return 1.0;
+
+    const waypoints = validStops.slice(0, -1).map(coord => `${coord.lat},${coord.lng}`).join('|');
+    const destination = validStops[validStops.length - 1];
+    
+    const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?` +
+      `origin=${startCoords.lat},${startCoords.lng}` +
+      `&destination=${destination.lat},${destination.lng}` +
+      (waypoints ? `&waypoints=optimize:true|${waypoints}` : '') +
+      `&key=${googleMapsApiKey}`;
+
+    const response = await fetch(directionsUrl);
+    const data = await response.json();
+
+    if (data.status === 'OK' && data.routes.length > 0) {
+      const route = data.routes[0];
+      const totalDistance = route.legs.reduce((sum: number, leg: any) => sum + leg.distance.value, 0) / 1609.34; // Convert meters to miles
+      
+      console.log(`Directions API: Route distance ${totalDistance.toFixed(1)} miles vs direct ${directDistance.toFixed(1)} miles`);
+      return directDistance / totalDistance;
+    } else {
+      console.log(`Directions API error: ${data.status}`);
+      return 1.0; // Assume efficient if API fails
+    }
+  } catch (error) {
+    console.error('Error calling Directions API:', error);
+    return 1.0; // Assume efficient if API fails
+  }
 }
 
 function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
