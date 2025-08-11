@@ -73,17 +73,41 @@ serve(async (req) => {
       const hasLocation = !isNaN(userLat) && !isNaN(userLng) && (userLat !== 0 || userLng !== 0);
       
       try {
-        // Use the Places Autocomplete API instead of searchText
-        let placesUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=geocode|establishment`;
+        // Use the new Google Places API (Text Search)
+        const placesUrl = 'https://places.googleapis.com/v1/places:searchText';
+        
+        // Create the request body for the new API
+        const requestBody = {
+          textQuery: query,
+          includedType: "establishment",
+          maxResultCount: 5,
+          languageCode: "en"
+        };
         
         // Add location bias if available
         if (hasLocation) {
           console.log(`Adding location bias: ${userLat}, ${userLng}`);
-          placesUrl += `&location=${userLat},${userLng}&radius=50000`;
+          requestBody.locationBias = {
+            circle: {
+              center: {
+                latitude: userLat,
+                longitude: userLng
+              },
+              radius: 50000.0
+            }
+          };
         }
         
-        // Call the Places API
-        const placesResponse = await fetch(placesUrl);
+        // Call the new Places API with POST request
+        const placesResponse = await fetch(placesUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.types'
+          },
+          body: JSON.stringify(requestBody)
+        });
 
         if (!placesResponse.ok) {
           const errorText = await placesResponse.text();
@@ -93,22 +117,17 @@ serve(async (req) => {
         
         const placesData = await placesResponse.json();
         
-        if (placesData.status !== "OK" && placesData.status !== "ZERO_RESULTS") {
-          console.error('Places API returned error status:', placesData.status, placesData.error_message);
-          throw new Error(`Places API returned: ${placesData.status} - ${placesData.error_message || ''}`);
-        }
-        
-        console.log(`Found ${placesData.predictions?.length || 0} place predictions`);
+        console.log(`Found ${placesData.places?.length || 0} place results`);
         
         // Transform the response to match our expected format
-        const results = (placesData.predictions || []).map(prediction => ({
-          id: prediction.place_id,
+        const results = (placesData.places || []).map(place => ({
+          id: place.id,
           displayName: {
-            text: prediction.structured_formatting?.main_text || prediction.description,
-            languageCode: "en"
+            text: place.displayName?.text || place.formattedAddress,
+            languageCode: place.displayName?.languageCode || "en"
           },
-          formattedAddress: prediction.description,
-          types: prediction.types
+          formattedAddress: place.formattedAddress,
+          types: place.types
         }));
         
         return new Response(
