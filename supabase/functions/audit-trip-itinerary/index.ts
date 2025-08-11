@@ -32,6 +32,7 @@ interface AuditRequest {
   itinerary: TripItinerary;
   startLocation: string;
   returnToStart: boolean;
+  intendedFurthestPoint?: string;
 }
 
 interface AuditResult {
@@ -47,7 +48,7 @@ serve(async (req) => {
   }
 
   try {
-    const { itinerary, startLocation, returnToStart }: AuditRequest = await req.json();
+    const { itinerary, startLocation, returnToStart, intendedFurthestPoint }: AuditRequest = await req.json();
     
     console.log('Starting trip audit for itinerary with', itinerary.stops.length, 'stops');
     
@@ -60,7 +61,7 @@ serve(async (req) => {
 
     // Stage 1: Route Efficiency Validation
     console.log('Stage 1: Validating route efficiency...');
-    const routeIssues = await validateRouteEfficiency(itinerary, startLocation, returnToStart);
+    const routeIssues = await validateRouteEfficiency(itinerary, startLocation, returnToStart, intendedFurthestPoint);
     auditResult.issues.push(...routeIssues);
 
     // Stage 2: Location Verification
@@ -94,7 +95,7 @@ serve(async (req) => {
   }
 });
 
-async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: string, returnToStart: boolean): Promise<string[]> {
+async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: string, returnToStart: boolean, intendedFurthestPoint?: string): Promise<string[]> {
   const issues: string[] = [];
   
   if (!itinerary.stops || itinerary.stops.length === 0) {
@@ -103,8 +104,16 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
 
   // Get coordinates for all locations with retry logic
   const startCoords = await getCoordinatesWithRetry(startLocation);
-  const furthestStop = itinerary.stops[itinerary.stops.length - 1];
-  const furthestCoords = await getCoordinatesWithRetry(furthestStop.location);
+  
+  // Determine the intended furthest point for route validation
+  let furthestPoint = intendedFurthestPoint;
+  if (!furthestPoint) {
+    // Fallback to last stop if no intended furthest point provided
+    furthestPoint = itinerary.stops[itinerary.stops.length - 1].location;
+  }
+  
+  console.log(`Using furthest point for validation: ${furthestPoint}`);
+  const furthestCoords = await getCoordinatesWithRetry(furthestPoint);
 
   if (!startCoords || !furthestCoords) {
     issues.push('Unable to validate route efficiency - coordinates unavailable');

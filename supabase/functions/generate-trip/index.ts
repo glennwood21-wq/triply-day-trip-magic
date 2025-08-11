@@ -210,6 +210,45 @@ serve(async (req) => {
         const startLocation = startLocationMatch ? startLocationMatch[1].trim() : 'Unknown';
         const returnToStart = promptLower.includes('return') || promptLower.includes('round trip');
         
+        // Extract intended furthest point from prompt
+        let intendedFurthestPoint = null;
+        
+        // Look for specific destination mentions with improved patterns
+        const destinationPatterns = [
+          /(?:furthest point|end point).*?should be\s+([^.]+)/i,
+          /journey.*?to\s+([A-Za-z\s,]+)(?:\s+\d+\s*(?:miles|km))?/i,
+          /approximately\s+\d+\s*miles from.*?to\s+([^.]+)/i,
+          /starting from\s+([^,]+).*?to\s+([^.]+)/i, // Match "from X to Y" patterns
+          /from\s+([^,]+).*?returning to/i // Match return trips
+        ];
+        
+        for (const pattern of destinationPatterns) {
+          const match = prompt.match(pattern);
+          if (match) {
+            // For "from X to Y" pattern, use the destination (second capture group)
+            if (pattern.source.includes('starting from') && match[2]) {
+              intendedFurthestPoint = match[2].trim();
+              console.log('Extracted intended furthest point (from-to pattern):', intendedFurthestPoint);
+              break;
+            } else if (match[1]) {
+              intendedFurthestPoint = match[1].trim();
+              console.log('Extracted intended furthest point:', intendedFurthestPoint);
+              break;
+            }
+          }
+        }
+        
+        // If no specific destination found, try to extract distance-based specification
+        if (!intendedFurthestPoint) {
+          const distanceMatch = prompt.match(/approximately\s+(\d+)\s*miles.*?from\s+([^.]+)/i);
+          if (distanceMatch) {
+            const distance = parseInt(distanceMatch[1]);
+            const fromLocation = distanceMatch[2].trim();
+            intendedFurthestPoint = `${distance} miles from ${fromLocation}`;
+            console.log('Extracted distance-based furthest point:', intendedFurthestPoint);
+          }
+        }
+        
         try {
           // Call audit function
           const auditResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/audit-trip-itinerary`, {
@@ -221,7 +260,8 @@ serve(async (req) => {
             body: JSON.stringify({
               itinerary,
               startLocation,
-              returnToStart
+              returnToStart,
+              intendedFurthestPoint
             }),
           });
 
