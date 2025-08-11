@@ -101,7 +101,7 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
     return issues;
   }
 
-  // Get coordinates for start location and furthest point
+  // Get coordinates for all locations
   const startCoords = await getCoordinates(startLocation);
   const furthestStop = itinerary.stops[itinerary.stops.length - 1];
   const furthestCoords = await getCoordinates(furthestStop.location);
@@ -111,43 +111,94 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
     return issues;
   }
 
-  const totalDistance = calculateDistance(startCoords.lat, startCoords.lng, furthestCoords.lat, furthestCoords.lng);
-  const seventyPercentDistance = totalDistance * 0.7;
+  // Calculate direct route bearing and distance
+  const directBearing = calculateBearing(startCoords.lat, startCoords.lng, furthestCoords.lat, furthestCoords.lng);
+  const totalDirectDistance = calculateDistance(startCoords.lat, startCoords.lng, furthestCoords.lat, furthestCoords.lng);
+  const seventyPercentDistance = totalDirectDistance * 0.7;
+  
+  console.log(`Direct route: ${totalDirectDistance.toFixed(1)} miles, bearing: ${directBearing.toFixed(1)}°, 70% threshold: ${seventyPercentDistance.toFixed(1)} miles`);
 
-  console.log(`Total distance: ${totalDistance} miles, 70% threshold: ${seventyPercentDistance} miles`);
+  // Define acceptable corridor (2 miles on each side of direct line)
+  const maxCorridorDeviation = 2.0; // miles
+  
+  // Get all stop coordinates upfront
+  const stopCoords = await Promise.all(
+    itinerary.stops.map(stop => getCoordinates(stop.location))
+  );
 
-  // Check 70% rule for each stop
-  let cumulativeDistance = 0;
   for (let i = 0; i < itinerary.stops.length; i++) {
     const stop = itinerary.stops[i];
-    const stopCoords = await getCoordinates(stop.location);
+    const coords = stopCoords[i];
     
-    if (stopCoords && startCoords) {
-      const distanceFromStart = calculateDistance(startCoords.lat, startCoords.lng, stopCoords.lat, stopCoords.lng);
-      
-      if (distanceFromStart < seventyPercentDistance) {
-        issues.push(`Stop ${i + 1} (${stop.name}) violates 70% rule - only ${distanceFromStart.toFixed(1)} miles from start (threshold: ${seventyPercentDistance.toFixed(1)} miles)`);
-      }
+    if (!coords) {
+      issues.push(`Stop ${i + 1} (${stop.name}) coordinates unavailable for validation`);
+      continue;
+    }
 
-      // Check for zig-zagging by comparing distances
-      if (i > 0) {
-        const prevStop = itinerary.stops[i - 1];
-        const prevCoords = await getCoordinates(prevStop.location);
+    // 1. STRICT 70% RULE VALIDATION
+    const distanceFromStart = calculateDistance(startCoords.lat, startCoords.lng, coords.lat, coords.lng);
+    if (distanceFromStart < seventyPercentDistance) {
+      issues.push(`Stop ${i + 1} (${stop.name}) violates 70% rule - only ${distanceFromStart.toFixed(1)} miles from start (min: ${seventyPercentDistance.toFixed(1)} miles)`);
+    }
+
+    // 2. CORRIDOR DEVIATION CHECK
+    const deviationFromLine = calculatePerpendicularDistance(
+      startCoords.lat, startCoords.lng,
+      furthestCoords.lat, furthestCoords.lng,
+      coords.lat, coords.lng
+    );
+    
+    if (deviationFromLine > maxCorridorDeviation) {
+      issues.push(`Stop ${i + 1} (${stop.name}) deviates ${deviationFromLine.toFixed(1)} miles from direct route (max: ${maxCorridorDeviation} miles)`);
+    }
+
+    // 3. BEARING ANALYSIS - Check if stop is roughly in the right direction
+    const stopBearing = calculateBearing(startCoords.lat, startCoords.lng, coords.lat, coords.lng);
+    const bearingDifference = Math.abs(normalizeBearing(stopBearing - directBearing));
+    
+    if (bearingDifference > 45) { // More than 45 degrees off course
+      issues.push(`Stop ${i + 1} (${stop.name}) is ${bearingDifference.toFixed(1)}° off the direct route bearing`);
+    }
+
+    // 4. PROGRESSIVE DISTANCE CHECK - Each stop should be closer to destination than previous
+    if (i > 0) {
+      const prevCoords = stopCoords[i - 1];
+      if (prevCoords) {
+        const prevDistanceToEnd = calculateDistance(prevCoords.lat, prevCoords.lng, furthestCoords.lat, furthestCoords.lng);
+        const currentDistanceToEnd = calculateDistance(coords.lat, coords.lng, furthestCoords.lat, furthestCoords.lng);
         
-        if (prevCoords) {
-          const directRouteDistance = calculateDistance(prevCoords.lat, prevCoords.lng, furthestCoords.lat, furthestCoords.lng);
-          const viaStopDistance = calculateDistance(prevCoords.lat, prevCoords.lng, stopCoords.lat, stopCoords.lng) + 
-                                  calculateDistance(stopCoords.lat, stopCoords.lng, furthestCoords.lat, furthestCoords.lng);
-          
-          const deviation = viaStopDistance - directRouteDistance;
-          if (deviation > 10) { // More than 10 mile deviation
-            issues.push(`Stop ${i + 1} (${stop.name}) causes ${deviation.toFixed(1)} mile deviation from direct route`);
-          }
+        if (currentDistanceToEnd >= prevDistanceToEnd) {
+          issues.push(`Stop ${i + 1} (${stop.name}) backtracking detected - not progressively closer to destination`);
         }
       }
     }
+
+    // 5. EXCESSIVE DETOUR CHECK using actual route distances
+    if (i > 0) {
+      const prevCoords = stopCoords[i - 1];
+      if (prevCoords) {
+        const directDistance = calculateDistance(prevCoords.lat, prevCoords.lng, coords.lat, coords.lng);
+        const detourRatio = directDistance / (totalDirectDistance / itinerary.stops.length);
+        
+        if (detourRatio > 1.5) { // Stop-to-stop distance should not be > 1.5x expected segment length
+          issues.push(`Stop ${i + 1} (${stop.name}) requires excessive detour - ${directDistance.toFixed(1)} miles from previous stop`);
+        }
+      }
+    }
+  }
+
+  // 6. OVERALL ROUTE EFFICIENCY CHECK
+  if (stopCoords.every(coord => coord !== null)) {
+    let totalRouteDistance = calculateDistance(startCoords.lat, startCoords.lng, stopCoords[0]!.lat, stopCoords[0]!.lng);
     
-    cumulativeDistance += parseFloat(stop.distanceFromPrevious) || 0;
+    for (let i = 1; i < stopCoords.length; i++) {
+      totalRouteDistance += calculateDistance(stopCoords[i-1]!.lat, stopCoords[i-1]!.lng, stopCoords[i]!.lat, stopCoords[i]!.lng);
+    }
+    
+    const routeEfficiency = totalDirectDistance / totalRouteDistance;
+    if (routeEfficiency < 0.7) { // Route should be at least 70% efficient
+      issues.push(`Overall route efficiency too low: ${(routeEfficiency * 100).toFixed(1)}% (minimum: 70%)`);
+    }
   }
 
   return issues;
@@ -328,7 +379,15 @@ Return ONLY a JSON object with the same structure as the original stop, ensuring
     const content = data.choices[0].message.content;
     
     try {
-      const replacement = JSON.parse(content);
+      // Clean the content to remove markdown formatting
+      let cleanContent = content.trim();
+      if (cleanContent.startsWith('```json')) {
+        cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+      } else if (cleanContent.startsWith('```')) {
+        cleanContent = cleanContent.replace(/^```\s*/, '').replace(/```\s*$/, '');
+      }
+      
+      const replacement = JSON.parse(cleanContent);
       
       // Validate replacement has required fields
       if (replacement.name && replacement.location && replacement.type) {
@@ -339,6 +398,7 @@ Return ONLY a JSON object with the same structure as the original stop, ensuring
       }
     } catch (parseError) {
       console.error('Failed to parse replacement JSON:', parseError);
+      console.error('Raw content:', content);
       return null;
     }
     
@@ -382,4 +442,46 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
             Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const lat1Rad = lat1 * Math.PI / 180;
+  const lat2Rad = lat2 * Math.PI / 180;
+  
+  const y = Math.sin(dLng) * Math.cos(lat2Rad);
+  const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLng);
+  
+  const bearing = Math.atan2(y, x) * 180 / Math.PI;
+  return (bearing + 360) % 360; // Normalize to 0-360
+}
+
+function normalizeBearing(bearing: number): number {
+  bearing = bearing % 360;
+  if (bearing > 180) bearing -= 360;
+  if (bearing < -180) bearing += 360;
+  return bearing;
+}
+
+function calculatePerpendicularDistance(
+  lineX1: number, lineY1: number, 
+  lineX2: number, lineY2: number, 
+  pointX: number, pointY: number
+): number {
+  // Convert to radians for accurate calculation
+  const lat1 = lineX1 * Math.PI / 180;
+  const lng1 = lineY1 * Math.PI / 180;
+  const lat2 = lineX2 * Math.PI / 180;
+  const lng2 = lineY2 * Math.PI / 180;
+  const latP = pointX * Math.PI / 180;
+  const lngP = pointY * Math.PI / 180;
+  
+  // Calculate cross-track distance (perpendicular distance from point to great circle)
+  const d13 = Math.acos(Math.sin(lat1) * Math.sin(latP) + Math.cos(lat1) * Math.cos(latP) * Math.cos(lngP - lng1));
+  const θ13 = Math.atan2(Math.sin(lngP - lng1) * Math.cos(latP), Math.cos(lat1) * Math.sin(latP) - Math.sin(lat1) * Math.cos(latP) * Math.cos(lngP - lng1));
+  const θ12 = Math.atan2(Math.sin(lng2 - lng1) * Math.cos(lat2), Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lng2 - lng1));
+  
+  const δxt = Math.asin(Math.sin(d13) * Math.sin(θ13 - θ12));
+  
+  return Math.abs(δxt) * 3959; // Convert to miles
 }
