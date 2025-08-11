@@ -187,13 +187,13 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
     }
   }
 
-  // 6. OVERALL ROUTE EFFICIENCY CHECK using Directions API
-  if (stopCoords.every(coord => coord !== null)) {
-    const routeEfficiency = await validateRouteWithDirectionsAPI(startCoords, stopCoords, totalDirectDistance);
-    if (routeEfficiency < 0.7) {
-      issues.push(`Overall route efficiency too low: ${(routeEfficiency * 100).toFixed(1)}% (minimum: 70%)`);
+    // 6. OVERALL ROUTE EFFICIENCY CHECK using Routes API
+    if (stopCoords.every(coord => coord !== null)) {
+      const routeEfficiency = await validateRouteWithRoutesAPI(startCoords, stopCoords, totalDirectDistance);
+      if (routeEfficiency < 0.7) {
+        issues.push(`Overall route efficiency too low: ${(routeEfficiency * 100).toFixed(1)}% (minimum: 70%)`);
+      }
     }
-  }
 
   return issues;
 }
@@ -465,45 +465,92 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
-async function validateRouteWithDirectionsAPI(
+async function validateRouteWithRoutesAPI(
   startCoords: { lat: number, lng: number },
   stopCoords: ({ lat: number, lng: number } | null)[],
   directDistance: number
 ): Promise<number> {
   if (!googleMapsApiKey) {
-    console.log('Google Maps API key not available for Directions API');
+    console.log('Google Maps API key not available for Routes API');
     return 1.0; // Assume efficient if we can't validate
   }
 
   try {
-    // Build waypoints for Directions API
+    // Build waypoints for Routes API
     const validStops = stopCoords.filter(coord => coord !== null) as { lat: number, lng: number }[];
     if (validStops.length === 0) return 1.0;
 
-    const waypoints = validStops.slice(0, -1).map(coord => `${coord.lat},${coord.lng}`).join('|');
+    // Prepare waypoints for Routes API format
+    const waypoints = validStops.slice(0, -1).map(coord => ({
+      location: {
+        latLng: {
+          latitude: coord.lat,
+          longitude: coord.lng
+        }
+      }
+    }));
+
     const destination = validStops[validStops.length - 1];
     
-    const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?` +
-      `origin=${startCoords.lat},${startCoords.lng}` +
-      `&destination=${destination.lat},${destination.lng}` +
-      (waypoints ? `&waypoints=optimize:true|${waypoints}` : '') +
-      `&key=${googleMapsApiKey}`;
+    const routesRequestBody = {
+      origin: {
+        location: {
+          latLng: {
+            latitude: startCoords.lat,
+            longitude: startCoords.lng
+          }
+        }
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: destination.lat,
+            longitude: destination.lng
+          }
+        }
+      },
+      intermediates: waypoints,
+      travelMode: "DRIVE",
+      routingPreference: "TRAFFIC_AWARE",
+      computeAlternativeRoutes: false,
+      routeModifiers: {
+        avoidTolls: false,
+        avoidHighways: false,
+        avoidFerries: false
+      },
+      languageCode: "en-US",
+      units: "IMPERIAL"
+    };
 
-    const response = await fetch(directionsUrl);
+    const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': googleMapsApiKey,
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline'
+      },
+      body: JSON.stringify(routesRequestBody)
+    });
+
+    if (!response.ok) {
+      console.log('Routes API request failed with status:', response.status);
+      return 1.0;
+    }
+
     const data = await response.json();
 
-    if (data.status === 'OK' && data.routes.length > 0) {
+    if (data.routes && data.routes.length > 0) {
       const route = data.routes[0];
-      const totalDistance = route.legs.reduce((sum: number, leg: any) => sum + leg.distance.value, 0) / 1609.34; // Convert meters to miles
+      const totalDistance = route.distanceMeters / 1609.34; // Convert meters to miles
       
-      console.log(`Directions API: Route distance ${totalDistance.toFixed(1)} miles vs direct ${directDistance.toFixed(1)} miles`);
+      console.log(`Routes API: Route distance ${totalDistance.toFixed(1)} miles vs direct ${directDistance.toFixed(1)} miles`);
       return directDistance / totalDistance;
     } else {
-      console.log(`Directions API error: ${data.status}`);
+      console.log('Routes API returned no valid routes');
       return 1.0; // Assume efficient if API fails
     }
   } catch (error) {
-    console.error('Error calling Directions API:', error);
+    console.error('Error calling Routes API:', error);
     return 1.0; // Assume efficient if API fails
   }
 }
