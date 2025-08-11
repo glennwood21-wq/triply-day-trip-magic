@@ -28,6 +28,9 @@ interface TripStop {
 
 interface TripItineraryDisplayProps {
   itinerary: TripItinerary;
+  startLocation: string;
+  endLocation: string;
+  returnToStart: boolean;
   onSave: () => void;
   onRegenerate: () => void;
   isSaving: boolean;
@@ -36,28 +39,46 @@ interface TripItineraryDisplayProps {
 
 const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
   itinerary,
+  startLocation,
+  endLocation,
+  returnToStart,
   onSave,
   onRegenerate,
   isSaving,
   isRegenerating
 }) => {
-  // Calculate total trip info
+  // Calculate total trip info including start/end points
   const totalTripInfo = useMemo(() => {
     if (!itinerary.stops || itinerary.stops.length === 0) {
-      return { totalDuration: 0, totalDistance: 0, totalTravelTime: 0 };
+      return { 
+        activityTime: 0, 
+        totalDistance: 0, 
+        travelTime: 0, 
+        totalTripTime: 0 
+      };
     }
 
-    return itinerary.stops.reduce((acc, stop) => {
+    const stopTotals = itinerary.stops.reduce((acc, stop) => {
       const duration = parseInt(stop.suggestedDuration) || 0;
       const distance = parseFloat(stop.distanceFromPrevious) || 0;
       const travelTime = parseInt(stop.travelTimeFromPrevious) || 0;
 
       return {
-        totalDuration: acc.totalDuration + duration,
+        activityTime: acc.activityTime + duration,
         totalDistance: acc.totalDistance + distance,
-        totalTravelTime: acc.totalTravelTime + travelTime
+        travelTime: acc.travelTime + travelTime
       };
-    }, { totalDuration: 0, totalDistance: 0, totalTravelTime: 0 });
+    }, { activityTime: 0, totalDistance: 0, travelTime: 0 });
+
+    // Calculate total trip time (activity + travel)
+    const totalTripTime = stopTotals.activityTime + stopTotals.travelTime;
+
+    return {
+      activityTime: stopTotals.activityTime,
+      totalDistance: stopTotals.totalDistance,
+      travelTime: stopTotals.travelTime,
+      totalTripTime
+    };
   }, [itinerary.stops]);
 
   // Helper function to get icon based on stop type
@@ -152,12 +173,12 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
         {/* Trip Overview */}
         <div className="bg-gray-50 p-4 rounded-md">
           <h3 className="text-lg font-semibold mb-2">Trip Overview</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="flex items-center">
               <Clock className="h-5 w-5 text-gray-600 mr-2" />
               <div>
                 <p className="text-sm text-gray-500">Activity Time</p>
-                <p className="font-medium">{formatDuration(totalTripInfo.totalDuration)}</p>
+                <p className="font-medium">{formatDuration(totalTripInfo.activityTime)}</p>
               </div>
             </div>
             <div className="flex items-center">
@@ -171,7 +192,14 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
               <Calendar className="h-5 w-5 text-gray-600 mr-2" />
               <div>
                 <p className="text-sm text-gray-500">Travel Time</p>
-                <p className="font-medium">{formatDuration(totalTripInfo.totalTravelTime)}</p>
+                <p className="font-medium">{formatDuration(totalTripInfo.travelTime)}</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Clock className="h-5 w-5 text-gray-600 mr-2" />
+              <div>
+                <p className="text-sm text-gray-500">Total Trip Time</p>
+                <p className="font-medium">{formatDuration(totalTripInfo.totalTripTime)}</p>
               </div>
             </div>
           </div>
@@ -192,13 +220,48 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
         <div>
           <h3 className="text-lg font-semibold mb-3">Trip Timeline</h3>
           <div className="space-y-4">
+            {/* Start Point */}
+            <div className="flex">
+              <div className="mr-4 relative">
+                <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-600 text-white">
+                  START
+                </div>
+                <div className="absolute top-10 bottom-0 left-1/2 w-0.5 -ml-0.5 bg-gray-200" />
+              </div>
+              
+              <div className="flex-1 pb-8">
+                <div className="bg-white rounded-md shadow-sm border p-4 border-green-200">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h4 className="font-semibold text-lg">{startLocation}</h4>
+                      <Badge variant="outline" className="mt-1 border-green-300 text-green-700">
+                        Starting Point
+                      </Badge>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600">Your journey begins here</p>
+                  
+                  {itinerary.stops.length > 0 && (
+                    <div className="flex items-center mt-3 text-sm text-gray-500">
+                      <Navigation className="h-4 w-4 mr-1" />
+                      <span>
+                        {itinerary.stops[0].travelTimeFromPrevious} min to first stop
+                        ({itinerary.stops[0].name})
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Intermediate Stops */}
             {itinerary.stops.map((stop, index) => (
               <div key={index} className="flex">
                 <div className="mr-4 relative">
                   <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary text-white">
                     {index + 1}
                   </div>
-                  {index < itinerary.stops.length - 1 && (
+                  {(index < itinerary.stops.length - 1 || !returnToStart) && (
                     <div className="absolute top-10 bottom-0 left-1/2 w-0.5 -ml-0.5 bg-gray-200" />
                   )}
                 </div>
@@ -218,9 +281,7 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium">{formatDuration(parseInt(stop.suggestedDuration))}</p>
-                        {index > 0 && (
-                          <p className="text-xs text-gray-500">{stop.distanceFromPrevious} miles</p>
-                        )}
+                        <p className="text-xs text-gray-500">{stop.distanceFromPrevious} miles</p>
                       </div>
                     </div>
                     
@@ -231,7 +292,7 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
                       <div className="flex items-center mt-3 text-sm text-gray-500">
                         <Navigation className="h-4 w-4 mr-1" />
                         <span>
-                          {stop.travelTimeFromPrevious} min to next stop
+                          {itinerary.stops[index + 1].travelTimeFromPrevious} min to next stop
                           ({itinerary.stops[index + 1].name})
                         </span>
                       </div>
@@ -240,6 +301,56 @@ const TripItineraryDisplay: React.FC<TripItineraryDisplayProps> = ({
                 </div>
               </div>
             ))}
+
+            {/* End Point (only if different from start) */}
+            {!returnToStart && (
+              <div className="flex">
+                <div className="mr-4 relative">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-red-600 text-white">
+                    END
+                  </div>
+                </div>
+                
+                <div className="flex-1 pb-8">
+                  <div className="bg-white rounded-md shadow-sm border p-4 border-red-200">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-semibold text-lg">{endLocation}</h4>
+                        <Badge variant="outline" className="mt-1 border-red-300 text-red-700">
+                          End Point
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600">Your journey ends here</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Return to Start (if applicable) */}
+            {returnToStart && itinerary.stops.length > 0 && (
+              <div className="flex">
+                <div className="mr-4 relative">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-600 text-white">
+                    END
+                  </div>
+                </div>
+                
+                <div className="flex-1 pb-8">
+                  <div className="bg-white rounded-md shadow-sm border p-4 border-green-200">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-semibold text-lg">{startLocation}</h4>
+                        <Badge variant="outline" className="mt-1 border-green-300 text-green-700">
+                          Return to Start
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600">Journey completes back at starting point</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

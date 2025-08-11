@@ -387,6 +387,9 @@ IMPORTANT GUIDELINES:
             {itinerary ? (
               <TripItineraryDisplay 
                 itinerary={itinerary} 
+                startLocation={getStartingLocation()}
+                endLocation={tripSettings.returnToStart ? getStartingLocation() : getDestinationInfo()}
+                returnToStart={tripSettings.returnToStart}
                 onSave={saveTrip} 
                 onRegenerate={generateTrip}
                 isSaving={savingTrip}
