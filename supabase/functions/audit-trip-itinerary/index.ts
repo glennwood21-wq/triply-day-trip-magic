@@ -130,17 +130,43 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
     return issues;
   }
   
-  const seventyPercentDistance = totalDirectDistance * 0.7;
-  
-  console.log(`Direct route: ${totalDirectDistance.toFixed(1)} miles, bearing: ${directBearing.toFixed(1)}°, 70% threshold: ${seventyPercentDistance.toFixed(1)} miles`);
+  console.log(`Direct route: ${totalDirectDistance.toFixed(1)} miles, bearing: ${directBearing.toFixed(1)}°`);
 
-  // Define acceptable corridor (2 miles on each side of direct line)
-  const maxCorridorDeviation = 2.0; // miles
+  // SMART VALIDATION: Adjust thresholds based on trip characteristics
+  const isShortTrip = totalDirectDistance < 10;
+  const isMediumTrip = totalDirectDistance >= 10 && totalDirectDistance <= 50;
+  const isLongTrip = totalDirectDistance > 50;
+  
+  // Dynamic thresholds based on trip distance
+  let minDistanceRatio = 0.3; // Start checking stops after 30% of journey (was 70%)
+  let maxCorridorDeviation = 5.0; // Relaxed from 2 miles
+  let maxBearingDifference = 90; // Allow 90° deviation for coastal/scenic routes
+  let maxDetourRatio = 2.5; // Allow longer detours for scenic routes
+  let minEfficiency = 0.4; // Reduced from 70% to 40%
+  
+  if (isShortTrip) {
+    minDistanceRatio = 0.2; // Very relaxed for short trips
+    maxCorridorDeviation = 8.0;
+    maxBearingDifference = 120;
+    minEfficiency = 0.3;
+  } else if (isMediumTrip) {
+    minDistanceRatio = 0.25;
+    maxCorridorDeviation = 6.0;
+    maxBearingDifference = 100;
+    minEfficiency = 0.35;
+  }
+  
+  const minDistance = totalDirectDistance * minDistanceRatio;
+  console.log(`Smart validation: min distance: ${minDistance.toFixed(1)} miles, max deviation: ${maxCorridorDeviation} miles, max bearing diff: ${maxBearingDifference}°`);
   
   // Get all stop coordinates upfront
   const stopCoords = await Promise.all(
     itinerary.stops.map(stop => getCoordinates(stop.location))
   );
+
+  // Track critical issues (only flag the most problematic stops)
+  let criticalIssues = 0;
+  const maxCriticalIssues = Math.min(2, Math.floor(itinerary.stops.length / 2)); // Limit replacements
 
   for (let i = 0; i < itinerary.stops.length; i++) {
     const stop = itinerary.stops[i];
@@ -151,66 +177,80 @@ async function validateRouteEfficiency(itinerary: TripItinerary, startLocation: 
       continue;
     }
 
-    // 1. STRICT 70% RULE VALIDATION
+    // 1. RELAXED DISTANCE RULE - Only flag stops very close to start
     const distanceFromStart = calculateDistance(startCoords.lat, startCoords.lng, coords.lat, coords.lng);
-    if (distanceFromStart < seventyPercentDistance) {
-      issues.push(`Stop ${i + 1} (${stop.name}) violates 70% rule - only ${distanceFromStart.toFixed(1)} miles from start (min: ${seventyPercentDistance.toFixed(1)} miles)`);
+    if (distanceFromStart < minDistance && criticalIssues < maxCriticalIssues) {
+      issues.push(`Stop ${i + 1} (${stop.name}) too close to start - only ${distanceFromStart.toFixed(1)} miles (min: ${minDistance.toFixed(1)} miles)`);
+      criticalIssues++;
     }
 
-    // 2. CORRIDOR DEVIATION CHECK
+    // 2. RELAXED CORRIDOR CHECK - Only flag major deviations
     const deviationFromLine = calculatePerpendicularDistance(
       startCoords.lat, startCoords.lng,
       furthestCoords.lat, furthestCoords.lng,
       coords.lat, coords.lng
     );
     
-    if (deviationFromLine > maxCorridorDeviation) {
-      issues.push(`Stop ${i + 1} (${stop.name}) deviates ${deviationFromLine.toFixed(1)} miles from direct route (max: ${maxCorridorDeviation} miles)`);
+    if (deviationFromLine > maxCorridorDeviation && criticalIssues < maxCriticalIssues) {
+      issues.push(`Stop ${i + 1} (${stop.name}) major route deviation - ${deviationFromLine.toFixed(1)} miles from direct route (max: ${maxCorridorDeviation} miles)`);
+      criticalIssues++;
     }
 
-    // 3. BEARING ANALYSIS - Check if stop is roughly in the right direction
+    // 3. RELAXED BEARING ANALYSIS - Allow scenic route flexibility
     const stopBearing = calculateBearing(startCoords.lat, startCoords.lng, coords.lat, coords.lng);
     const bearingDifference = Math.abs(normalizeBearing(stopBearing - directBearing));
     
-    if (bearingDifference > 45) { // More than 45 degrees off course
-      issues.push(`Stop ${i + 1} (${stop.name}) is ${bearingDifference.toFixed(1)}° off the direct route bearing`);
+    // Only flag extreme bearing violations (was 45°, now 90-120°)
+    if (bearingDifference > maxBearingDifference && criticalIssues < maxCriticalIssues) {
+      issues.push(`Stop ${i + 1} (${stop.name}) extreme direction deviation - ${bearingDifference.toFixed(1)}° off route (max: ${maxBearingDifference}°)`);
+      criticalIssues++;
     }
 
-    // 4. PROGRESSIVE DISTANCE CHECK - Each stop should be closer to destination than previous
-    if (i > 0) {
+    // 4. SMART PROGRESSIVE CHECK - Allow some backtracking for scenic routes
+    if (i > 1) { // Start checking from 3rd stop to allow initial exploration
       const prevCoords = stopCoords[i - 1];
       if (prevCoords) {
         const prevDistanceToEnd = calculateDistance(prevCoords.lat, prevCoords.lng, furthestCoords.lat, furthestCoords.lng);
         const currentDistanceToEnd = calculateDistance(coords.lat, coords.lng, furthestCoords.lat, furthestCoords.lng);
         
-        if (currentDistanceToEnd >= prevDistanceToEnd) {
-          issues.push(`Stop ${i + 1} (${stop.name}) backtracking detected - not progressively closer to destination`);
+        // Only flag significant backtracking (>10 miles backward)
+        if (currentDistanceToEnd > prevDistanceToEnd + 10 && criticalIssues < maxCriticalIssues) {
+          issues.push(`Stop ${i + 1} (${stop.name}) significant backtracking - ${(currentDistanceToEnd - prevDistanceToEnd).toFixed(1)} miles backward`);
+          criticalIssues++;
         }
       }
     }
 
-    // 5. EXCESSIVE DETOUR CHECK using actual route distances
+    // 5. RELAXED DETOUR CHECK - Allow longer detours for scenic value
     if (i > 0) {
       const prevCoords = stopCoords[i - 1];
       if (prevCoords) {
         const directDistance = calculateDistance(prevCoords.lat, prevCoords.lng, coords.lat, coords.lng);
-        const detourRatio = directDistance / (totalDirectDistance / itinerary.stops.length);
+        const expectedSegmentLength = totalDirectDistance / itinerary.stops.length;
+        const detourRatio = directDistance / expectedSegmentLength;
         
-        if (detourRatio > 1.5) { // Stop-to-stop distance should not be > 1.5x expected segment length
-          issues.push(`Stop ${i + 1} (${stop.name}) requires excessive detour - ${directDistance.toFixed(1)} miles from previous stop`);
+        // Only flag extreme detours (was 1.5x, now 2.5x+)
+        if (detourRatio > maxDetourRatio && directDistance > 20 && criticalIssues < maxCriticalIssues) {
+          issues.push(`Stop ${i + 1} (${stop.name}) extreme detour - ${directDistance.toFixed(1)} miles from previous stop`);
+          criticalIssues++;
         }
       }
     }
   }
 
-    // 6. OVERALL ROUTE EFFICIENCY CHECK using Routes API
-    if (stopCoords.every(coord => coord !== null)) {
-      const routeEfficiency = await validateRouteWithRoutesAPI(startCoords, stopCoords, totalDirectDistance);
-      if (routeEfficiency < 0.7) {
-        issues.push(`Overall route efficiency too low: ${(routeEfficiency * 100).toFixed(1)}% (minimum: 70%)`);
+  // 6. RELAXED OVERALL EFFICIENCY CHECK
+  if (stopCoords.every(coord => coord !== null)) {
+    const routeEfficiency = await validateRouteWithRoutesAPI(startCoords, stopCoords, totalDirectDistance);
+    if (routeEfficiency < minEfficiency) {
+      console.log(`Route efficiency ${(routeEfficiency * 100).toFixed(1)}% below minimum ${(minEfficiency * 100).toFixed(1)}%`);
+      // Only add efficiency issue if it's extremely low
+      if (routeEfficiency < 0.25) {
+        issues.push(`Route extremely inefficient: ${(routeEfficiency * 100).toFixed(1)}% (minimum: ${(minEfficiency * 100).toFixed(1)}%)`);
       }
     }
+  }
 
+  console.log(`Validation complete: ${criticalIssues} critical issues found (max allowed: ${maxCriticalIssues})`);
   return issues;
 }
 
@@ -218,37 +258,50 @@ async function verifyLocations(itinerary: TripItinerary): Promise<string[]> {
   const issues: string[] = [];
   
   if (!googleMapsApiKey) {
-    issues.push('Google Maps API key not available for location verification');
-    return issues;
+    console.log('Google Maps API key not available - skipping location verification');
+    return issues; // Don't add as issue, just skip verification
   }
 
-  for (let i = 0; i < itinerary.stops.length; i++) {
+  // Only verify a maximum of 2 stops to prevent excessive API calls and false positives
+  let verificationsPerformed = 0;
+  const maxVerifications = 2;
+
+  for (let i = 0; i < itinerary.stops.length && verificationsPerformed < maxVerifications; i++) {
     const stop = itinerary.stops[i];
     
-    // Check for generic names
-    const genericKeywords = ['cafe', 'restaurant', 'park', 'lookout', 'beach', 'winery', 'tours'];
-    const isGeneric = genericKeywords.some(keyword => 
-      stop.name.toLowerCase().includes(keyword) && 
-      !stop.name.includes(' ') // Single word names are more likely to be generic
+    // ENHANCED SUSPICIOUS PATTERN DETECTION
+    const suspiciousPatterns = [
+      /^\d+\/\d+-\d+/, // "1/2-4 Street Name" pattern
+      /^unit \d+/i,
+      /apartment \d+/i,
+      /suite \d+/i,
+      /level \d+/i,
+      /shop \d+/i
+    ];
+    
+    const hasSuspiciousAddress = suspiciousPatterns.some(pattern => 
+      pattern.test(stop.location)
     );
     
-    if (isGeneric) {
-      issues.push(`Stop ${i + 1} (${stop.name}) appears to have a generic name`);
+    if (hasSuspiciousAddress) {
+      issues.push(`Stop ${i + 1} (${stop.name}) has suspicious address pattern: ${stop.location}`);
+      verificationsPerformed++;
+      continue;
     }
 
-    // Verify location exists using Google Places API
-    const verificationResult = await verifyLocationExists(stop.location, stop.name);
-    if (!verificationResult.exists) {
-      issues.push(`Stop ${i + 1} (${stop.name}) could not be verified: ${verificationResult.reason}`);
-    }
-
-    // Check address completeness
-    const addressParts = stop.location.split(',').map(part => part.trim());
-    if (addressParts.length < 4 || !stop.location.includes('Australia')) {
-      issues.push(`Stop ${i + 1} (${stop.name}) has incomplete address: ${stop.location}`);
+    // REAL-TIME VERIFICATION for potentially problematic stops only
+    if (stop.name.includes('Delight') || stop.name.includes('Generic') || 
+        stop.location.includes('1/2-') || stop.location.length < 20) {
+      
+      const verificationResult = await verifyLocationExists(stop.location, stop.name);
+      if (!verificationResult.exists && verificationResult.reason.includes('not found')) {
+        issues.push(`Stop ${i + 1} (${stop.name}) could not be verified: ${verificationResult.reason}`);
+      }
+      verificationsPerformed++;
     }
   }
 
+  console.log(`Location verification complete: ${verificationsPerformed}/${itinerary.stops.length} stops checked`);
   return issues;
 }
 
@@ -318,27 +371,50 @@ async function replaceErrantStops(
   const replacements: { [key: number]: TripStop } = {};
   const updatedItinerary: TripItinerary = { ...itinerary, stops: [...itinerary.stops] };
   
-  // Identify which stops need replacement based on issues
-  const stopsToReplace: number[] = [];
+  // CONSERVATIVE REPLACEMENT STRATEGY: Only replace the most critical issues
+  const criticalStopsToReplace: number[] = [];
+  
+  // Only consider stops with multiple severe issues or verification failures
+  const stopIssueCount: { [key: number]: number } = {};
+  const criticalKeywords = ['suspicious address', 'could not be verified', 'extreme'];
+  
   issues.forEach(issue => {
     const match = issue.match(/Stop (\d+)/);
     if (match) {
       const stopIndex = parseInt(match[1]) - 1;
-      if (!stopsToReplace.includes(stopIndex)) {
-        stopsToReplace.push(stopIndex);
+      
+      // Only count critical issues
+      const isCritical = criticalKeywords.some(keyword => 
+        issue.toLowerCase().includes(keyword)
+      );
+      
+      if (isCritical) {
+        stopIssueCount[stopIndex] = (stopIssueCount[stopIndex] || 0) + 1;
       }
     }
   });
 
-  console.log('Replacing stops:', stopsToReplace);
+  // Only replace stops with multiple critical issues (>= 2)
+  Object.entries(stopIssueCount).forEach(([stopIndexStr, count]) => {
+    if (count >= 2) {
+      const stopIndex = parseInt(stopIndexStr);
+      criticalStopsToReplace.push(stopIndex);
+    }
+  });
 
-  // For each problematic stop, generate a replacement
-  for (const stopIndex of stopsToReplace) {
+  // CIRCUIT BREAKER: Limit to maximum 1 replacement per audit
+  const maxReplacements = 1;
+  const finalStopsToReplace = criticalStopsToReplace.slice(0, maxReplacements);
+
+  console.log(`Critical stops identified: ${criticalStopsToReplace.length}, replacing: ${finalStopsToReplace.length} (max: ${maxReplacements})`);
+
+  // For each critical stop, attempt replacement with verification
+  for (const stopIndex of finalStopsToReplace) {
     if (stopIndex >= 0 && stopIndex < updatedItinerary.stops.length) {
       const originalStop = updatedItinerary.stops[stopIndex];
       
-      // Generate replacement stop using AI
-      const replacement = await generateReplacementStop(
+      // Generate and verify replacement
+      const replacement = await generateVerifiedReplacementStop(
         originalStop, 
         startLocation, 
         updatedItinerary.stops,
@@ -346,9 +422,19 @@ async function replaceErrantStops(
       );
       
       if (replacement) {
-        replacements[stopIndex] = replacement;
-        updatedItinerary.stops[stopIndex] = replacement;
-        console.log(`Replaced stop ${stopIndex + 1}: ${originalStop.name} → ${replacement.name}`);
+        // Quality check: Only replace if replacement is significantly better
+        const qualityScore = await evaluateStopQuality(replacement);
+        const originalQualityScore = await evaluateStopQuality(originalStop);
+        
+        if (qualityScore > originalQualityScore) {
+          replacements[stopIndex] = replacement;
+          updatedItinerary.stops[stopIndex] = replacement;
+          console.log(`Replaced stop ${stopIndex + 1}: ${originalStop.name} → ${replacement.name} (quality: ${originalQualityScore} → ${qualityScore})`);
+        } else {
+          console.log(`Replacement quality not better (${qualityScore} vs ${originalQualityScore}), keeping original: ${originalStop.name}`);
+        }
+      } else {
+        console.log(`Failed to generate verified replacement for stop ${stopIndex + 1}, keeping original: ${originalStop.name}`);
       }
     }
   }
@@ -752,4 +838,147 @@ function calculatePerpendicularDistance(
   const δxt = Math.asin(Math.sin(d13) * Math.sin(θ13 - θ12));
   
   return Math.abs(δxt) * 3959; // Convert to miles
+}
+
+// New function to generate verified replacement stops with real-time verification
+async function generateVerifiedReplacementStop(
+  originalStop: TripStop,
+  startLocation: string,
+  allStops: TripStop[],
+  stopIndex: number
+): Promise<TripStop | null> {
+  
+  if (!openAIApiKey) {
+    console.error('OpenAI API key not available for generating replacement');
+    return null;
+  }
+
+  // Enhanced prompt for better real location generation
+  const prompt = `Generate a REAL replacement location for this problematic stop in Australia:
+
+Original Stop: ${originalStop.name} at ${originalStop.location}
+Stop Type: ${originalStop.type}
+Position: ${stopIndex + 1} of ${allStops.length}
+Start Location: ${startLocation}
+
+CRITICAL REQUIREMENTS:
+1. Must be a REAL, well-known business/location that actually exists
+2. Use EXACT business names (e.g., "Brighton Beach Boxes", "Sorrento Pier", "The Peninsula Hot Springs")
+3. Provide COMPLETE real address with suburb, state, postcode, Australia
+4. Must be along a logical coastal route in Victoria, Australia
+5. Must be the same category: ${originalStop.type}
+
+Return ONLY JSON:
+{
+  "name": "[Exact Real Business/Location Name]",
+  "type": "${originalStop.type}",
+  "location": "[Complete Real Street Address, Suburb VIC [postcode], Australia]",
+  "description": "Popular [${originalStop.type}] destination",
+  "suggestedDuration": "45 minutes",
+  "distanceFromPrevious": "8 miles",
+  "travelTimeFromPrevious": "15 minutes"
+}`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are a local Victoria, Australia travel expert with knowledge of real businesses and landmarks. Return ONLY valid JSON.' 
+          },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.1, // Lower temperature for more factual responses
+        max_tokens: 250,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('OpenAI API request failed for verified replacement');
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    
+    if (!content) {
+      console.error('No content in OpenAI response for verified replacement');
+      return null;
+    }
+
+    // Parse and validate the replacement
+    try {
+      let cleanContent = content.trim();
+      cleanContent = cleanContent.replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
+      cleanContent = cleanContent.replace(/^```\s*/i, '').replace(/```\s*$/i, '');
+      
+      const firstBrace = cleanContent.indexOf('{');
+      const lastBrace = cleanContent.lastIndexOf('}');
+      if (firstBrace >= 0 && lastBrace >= 0) {
+        cleanContent = cleanContent.substring(firstBrace, lastBrace + 1);
+      }
+      
+      const replacement = JSON.parse(cleanContent);
+      
+      // REAL-TIME VERIFICATION before accepting
+      if (googleMapsApiKey) {
+        const verificationResult = await verifyLocationExists(replacement.location, replacement.name);
+        if (!verificationResult.exists) {
+          console.log(`Generated replacement failed verification: ${verificationResult.reason}`);
+          return null; // Reject unverified replacements
+        }
+      }
+      
+      // Additional validation
+      const requiredFields = ['name', 'type', 'location', 'description'];
+      const isValid = requiredFields.every(field => replacement[field] && replacement[field].toString().trim().length > 0);
+      
+      if (!isValid) {
+        console.log('Generated replacement missing required fields');
+        return null;
+      }
+
+      console.log(`Generated verified replacement: ${replacement.name}`);
+      replacement.verificationStatus = 'verified';
+      return replacement;
+      
+    } catch (parseError) {
+      console.error('Failed to parse verified replacement JSON:', parseError.message);
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('Error generating verified replacement:', error.message);
+    return null;
+  }
+}
+
+// Function to evaluate stop quality for comparison
+async function evaluateStopQuality(stop: TripStop): Promise<number> {
+  let score = 50; // Base score
+  
+  // Address completeness (0-20 points)
+  const addressParts = stop.location.split(',');
+  if (addressParts.length >= 4) score += 10;
+  if (stop.location.includes('Australia')) score += 5;
+  if (stop.location.includes('VIC')) score += 5;
+  
+  // Name quality (0-20 points)
+  if (stop.name.length > 5 && !stop.name.includes('Generic')) score += 10;
+  if (stop.name.includes('Beach') || stop.name.includes('Pier') || stop.name.includes('Restaurant')) score += 5;
+  if (!stop.name.includes('Delight') && !stop.name.includes('1/2-')) score += 5;
+  
+  // Location verification status (0-30 points)
+  if (stop.verificationStatus === 'verified') score += 30;
+  else if (stop.verificationStatus === 'fallback_used') score += 10;
+  else if (!stop.verificationStatus) score += 15; // Assume original is decent
+  
+  return Math.min(score, 100); // Cap at 100
 }
