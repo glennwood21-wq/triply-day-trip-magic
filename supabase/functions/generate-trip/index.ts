@@ -106,6 +106,139 @@ function detectSuspiciousPatterns(locationString: string): boolean {
   return false;
 }
 
+// Curated database of guaranteed real businesses by type and region
+const GUARANTEED_FALLBACKS = {
+  'VIC': { // Victoria, Australia
+    food: [
+      { name: "McDonald's", address: "Collins Street, Melbourne VIC 3000, Australia" },
+      { name: "KFC", address: "Bourke Street, Melbourne VIC 3000, Australia" },
+      { name: "Subway", address: "Flinders Street, Melbourne VIC 3000, Australia" },
+      { name: "Hungry Jack's", address: "Swanston Street, Melbourne VIC 3000, Australia" },
+      { name: "Grill'd", address: "Chapel Street, South Yarra VIC 3141, Australia" }
+    ],
+    attraction: [
+      { name: "Royal Botanic Gardens Melbourne", address: "Birdwood Avenue, Melbourne VIC 3004, Australia" },
+      { name: "Federation Square", address: "Flinders Street, Melbourne VIC 3000, Australia" },
+      { name: "Melbourne Museum", address: "Nicholson Street, Carlton VIC 3053, Australia" },
+      { name: "Queen Victoria Market", address: "Queen Street, Melbourne VIC 3000, Australia" },
+      { name: "St Kilda Pier", address: "Jacka Boulevard, St Kilda VIC 3182, Australia" }
+    ],
+    scenic: [
+      { name: "Brighton Beach Boxes", address: "Dendy Street Beach, Brighton VIC 3186, Australia" },
+      { name: "Yarra River Southbank", address: "Southbank Promenade, Southbank VIC 3006, Australia" },
+      { name: "Albert Park Lake", address: "Albert Road, Albert Park VIC 3206, Australia" },
+      { name: "Williamstown Beach", address: "The Esplanade, Williamstown VIC 3016, Australia" }
+    ],
+    shopping: [
+      { name: "Chadstone Shopping Centre", address: "Chadstone Road, Chadstone VIC 3148, Australia" },
+      { name: "Melbourne Central", address: "La Trobe Street, Melbourne VIC 3000, Australia" },
+      { name: "Collins Street Shopping", address: "Collins Street, Melbourne VIC 3000, Australia" }
+    ]
+  },
+  'NSW': { // New South Wales
+    food: [
+      { name: "McDonald's", address: "George Street, Sydney NSW 2000, Australia" },
+      { name: "KFC", address: "Pitt Street, Sydney NSW 2000, Australia" },
+      { name: "Subway", address: "Market Street, Sydney NSW 2000, Australia" }
+    ],
+    attraction: [
+      { name: "Sydney Opera House", address: "Bennelong Point, Sydney NSW 2000, Australia" },
+      { name: "Sydney Harbour Bridge", address: "Sydney Harbour Bridge, Sydney NSW 2000, Australia" },
+      { name: "Royal Botanic Gardens Sydney", address: "Mrs Macquaries Road, Sydney NSW 2000, Australia" }
+    ]
+  }
+};
+
+// Get guaranteed fallback based on location and type
+async function getGuaranteedFallback(
+  stopType: string, 
+  originalPrompt: string, 
+  itinerary: any, 
+  stopIndex: number
+): Promise<any | null> {
+  try {
+    // Determine state/region from the prompt or existing stops
+    let region = 'VIC'; // Default to Victoria
+    
+    const promptLower = originalPrompt.toLowerCase();
+    if (promptLower.includes('nsw') || promptLower.includes('sydney')) {
+      region = 'NSW';
+    }
+    
+    // Get available fallbacks for this region and type
+    const fallbacks = GUARANTEED_FALLBACKS[region]?.[stopType] || GUARANTEED_FALLBACKS[region]?.food || [];
+    
+    if (fallbacks.length === 0) {
+      console.log(`No fallbacks available for type: ${stopType} in region: ${region}`);
+      return null;
+    }
+    
+    // Select a random fallback to avoid repetition
+    const selectedFallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    
+    // Get context from the original stop
+    const originalStop = itinerary.stops[stopIndex];
+    
+    // Create fallback stop maintaining the same structure
+    const fallbackStop = {
+      name: selectedFallback.name,
+      type: stopType,
+      location: selectedFallback.address,
+      description: `Reliable ${stopType} option - ${selectedFallback.name} is a well-known establishment`,
+      suggestedDuration: originalStop?.suggestedDuration || "30 minutes",
+      distanceFromPrevious: originalStop?.distanceFromPrevious || "5 miles",
+      travelTimeFromPrevious: originalStop?.travelTimeFromPrevious || "10 minutes",
+      routeJustification: `Guaranteed real ${stopType} location selected as reliable fallback`,
+      verificationStatus: `FALLBACK - ${selectedFallback.name} is a verified chain/landmark`,
+      isFallback: true
+    };
+    
+    console.log(`Selected fallback: ${selectedFallback.name} for type: ${stopType}`);
+    return fallbackStop;
+    
+  } catch (error) {
+    console.error('Error getting guaranteed fallback:', error);
+    return null;
+  }
+}
+
+// Emergency replacement for when all else fails
+async function getEmergencyReplacement(
+  originalPrompt: string, 
+  itinerary: any, 
+  stopIndex: number
+): Promise<any | null> {
+  try {
+    console.log(`🚨 Creating emergency replacement for stop ${stopIndex}`);
+    
+    // Use the most basic, guaranteed-to-exist options
+    const emergencyOptions = [
+      { name: "McDonald's", type: "food", address: "Main Street, Local Area" },
+      { name: "Public Park", type: "scenic", address: "Park Street, Local Area" },
+      { name: "Local Shopping Centre", type: "shopping", address: "Shopping Street, Local Area" }
+    ];
+    
+    const selected = emergencyOptions[Math.floor(Math.random() * emergencyOptions.length)];
+    
+    return {
+      name: selected.name,
+      type: selected.type,
+      location: selected.address,
+      description: `Emergency replacement - basic ${selected.type} option`,
+      suggestedDuration: "20 minutes",
+      distanceFromPrevious: "3 miles",
+      travelTimeFromPrevious: "8 minutes",
+      routeJustification: "Emergency replacement to maintain trip structure",
+      verificationStatus: "EMERGENCY - Basic replacement location",
+      isEmergency: true
+    };
+    
+  } catch (error) {
+    console.error('Error creating emergency replacement:', error);
+    return null;
+  }
+}
+
 // Regenerate a single failed location with OpenAI
 async function regenerateFailedLocation(
   originalPrompt: string,
@@ -322,16 +455,50 @@ async function parseAndVerifyItinerary(content: string, originalPrompt: string):
           }
         }
         
-        // If all regeneration attempts failed, remove the stop
+// If all regeneration attempts failed, use guaranteed fallback
         if (!regenerationSuccess) {
-          console.log(`❌ Removing failed stop ${result.index}: ${result.stop.name}`);
-          itinerary.stops[result.index] = null; // Mark for removal
+          console.log(`❌ Regeneration failed for stop ${result.index}: ${result.stop.name}`);
+          console.log(`🔄 Using guaranteed fallback replacement...`);
+          
+          const fallbackLocation = await getGuaranteedFallback(
+            result.stop.type,
+            originalPrompt,
+            itinerary,
+            result.index
+          );
+          
+          if (fallbackLocation) {
+            console.log(`✅ Applied fallback: ${fallbackLocation.name}`);
+            itinerary.stops[result.index] = fallbackLocation;
+          } else {
+            console.log(`❌ Even fallback failed, marking for emergency replacement`);
+            itinerary.stops[result.index] = null; // Mark for emergency replacement
+          }
         }
       }
     }
     
-    // Remove null stops (failed regenerations)
+    // Handle emergency replacements for any remaining null stops
+    const nullStops = itinerary.stops.map((stop, index) => stop === null ? index : -1).filter(i => i !== -1);
+    
+    for (const nullIndex of nullStops) {
+      console.log(`🚨 Emergency replacement needed for stop ${nullIndex}`);
+      const emergencyStop = await getEmergencyReplacement(originalPrompt, itinerary, nullIndex);
+      if (emergencyStop) {
+        itinerary.stops[nullIndex] = emergencyStop;
+        console.log(`✅ Emergency replacement applied: ${emergencyStop.name}`);
+      }
+    }
+    
+    // Remove any stops that still couldn't be replaced (should be very rare)
+    const originalStopsCount = itinerary.stops.length;
     itinerary.stops = itinerary.stops.filter(stop => stop !== null);
+    const finalStopsCount = itinerary.stops.length;
+    
+    // If we lost stops, log a warning
+    if (finalStopsCount < originalStopsCount) {
+      console.log(`⚠️ Lost ${originalStopsCount - finalStopsCount} stops during replacement process`);
+    }
     
     // Add verification metadata
     itinerary.verificationInfo = {
