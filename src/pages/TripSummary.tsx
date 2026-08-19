@@ -229,7 +229,6 @@ const TripSummary = () => {
           .from('trips')
           .update({
             title: itinerary.title,
-            status: 'completed',
             description: JSON.stringify({
               ...tripSettings,
               generatedItinerary: itinerary
